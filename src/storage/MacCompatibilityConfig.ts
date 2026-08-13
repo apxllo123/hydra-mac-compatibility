@@ -1,177 +1,124 @@
 /**
  * Hydra Mac Compatibility
  *
- * Global configuration for the Windows Compatibility system.
+ * Central configuration for the compatibility system.
  *
- * This file defines configuration values for the compatibility
- * environment without containing game-specific compatibility data.
- *
- * Game-specific settings belong in each game's compatibility profile.
+ * This file defines configuration values and safe defaults.
+ * It does not perform filesystem or Wine operations.
  */
 
 export interface MacCompatibilityConfigOptions {
   /**
-   * Root directory used by the compatibility system.
+   * Root directory where compatibility data is stored.
    */
-  compatibilityRoot: string;
+  rootPath: string;
 
   /**
-   * Whether compatibility logging is enabled.
+   * Whether automatic backups are enabled.
+   *
+   * Defaults to true.
+   */
+  automaticBackups?: boolean;
+
+  /**
+   * Whether failed repair operations should automatically
+   * attempt restoration from the most recent backup.
+   *
+   * Defaults to true.
+   */
+  automaticRestoreOnFailure?: boolean;
+
+  /**
+   * Whether compatibility operations should write logs.
+   *
+   * Defaults to true.
    */
   loggingEnabled?: boolean;
 
   /**
-   * Minimum logging level.
-   */
-  logLevel?: "debug" | "info" | "warning" | "error";
-
-  /**
-   * Whether automatic backups are enabled before changes.
-   */
-  automaticBackupsEnabled?: boolean;
-
-  /**
-   * Whether automatic repair is allowed.
+   * Maximum number of backups retained for each game.
    *
-   * This should remain disabled unless explicitly enabled.
+   * Defaults to 5.
    */
-  automaticRepairEnabled?: boolean;
-
-  /**
-   * Whether compatibility testing should be performed
-   * after important configuration changes.
-   */
-  testAfterChanges?: boolean;
+  maxBackupsPerGame?: number;
 }
 
 export class MacCompatibilityConfig {
-  private readonly compatibilityRoot: string;
+  readonly rootPath: string;
+  readonly automaticBackups: boolean;
+  readonly automaticRestoreOnFailure: boolean;
+  readonly loggingEnabled: boolean;
+  readonly maxBackupsPerGame: number;
 
-  private loggingEnabled: boolean;
-  private logLevel: "debug" | "info" | "warning" | "error";
-  private automaticBackupsEnabled: boolean;
-  private automaticRepairEnabled: boolean;
-  private testAfterChanges: boolean;
-
-  constructor(options: MacCompatibilityConfigOptions) {
-    if (!options.compatibilityRoot.trim()) {
+  constructor(
+    options: MacCompatibilityConfigOptions,
+  ) {
+    if (!options.rootPath.trim()) {
       throw new Error(
         "Compatibility root path cannot be empty.",
       );
     }
 
-    this.compatibilityRoot = options.compatibilityRoot;
+    if (
+      options.maxBackupsPerGame !==
+        undefined &&
+      (!Number.isInteger(
+        options.maxBackupsPerGame,
+      ) ||
+        options.maxBackupsPerGame < 1)
+    ) {
+      throw new Error(
+        "maxBackupsPerGame must be a positive integer.",
+      );
+    }
 
-    this.loggingEnabled = options.loggingEnabled ?? true;
+    this.rootPath =
+      options.rootPath;
 
-    this.logLevel = options.logLevel ?? "info";
+    this.automaticBackups =
+      options.automaticBackups ??
+      true;
 
-    this.automaticBackupsEnabled =
-      options.automaticBackupsEnabled ?? true;
+    this.automaticRestoreOnFailure =
+      options.automaticRestoreOnFailure ??
+      true;
 
-    this.automaticRepairEnabled =
-      options.automaticRepairEnabled ?? false;
+    this.loggingEnabled =
+      options.loggingEnabled ??
+      true;
 
-    this.testAfterChanges =
-      options.testAfterChanges ?? true;
+    this.maxBackupsPerGame =
+      options.maxBackupsPerGame ??
+      5;
   }
 
   /**
-   * Return the root compatibility directory.
+   * Create a configuration using safe defaults.
    */
-  getCompatibilityRoot(): string {
-    return this.compatibilityRoot;
+  static createDefault(
+    rootPath: string,
+  ): MacCompatibilityConfig {
+    return new MacCompatibilityConfig(
+      {
+        rootPath,
+      },
+    );
   }
 
   /**
-   * Check whether logging is enabled.
+   * Return a plain object suitable for persistence.
    */
-  isLoggingEnabled(): boolean {
-    return this.loggingEnabled;
-  }
-
-  /**
-   * Enable or disable compatibility logging.
-   */
-  setLoggingEnabled(enabled: boolean): void {
-    this.loggingEnabled = enabled;
-  }
-
-  /**
-   * Return the configured logging level.
-   */
-  getLogLevel(): "debug" | "info" | "warning" | "error" {
-    return this.logLevel;
-  }
-
-  /**
-   * Change the logging level.
-   */
-  setLogLevel(
-    level: "debug" | "info" | "warning" | "error",
-  ): void {
-    this.logLevel = level;
-  }
-
-  /**
-   * Check whether automatic backups are enabled.
-   */
-  isAutomaticBackupsEnabled(): boolean {
-    return this.automaticBackupsEnabled;
-  }
-
-  /**
-   * Enable or disable automatic backups.
-   */
-  setAutomaticBackupsEnabled(enabled: boolean): void {
-    this.automaticBackupsEnabled = enabled;
-  }
-
-  /**
-   * Check whether automatic repair is enabled.
-   */
-  isAutomaticRepairEnabled(): boolean {
-    return this.automaticRepairEnabled;
-  }
-
-  /**
-   * Enable or disable automatic repair.
-   */
-  setAutomaticRepairEnabled(enabled: boolean): void {
-    this.automaticRepairEnabled = enabled;
-  }
-
-  /**
-   * Check whether compatibility tests should run after
-   * important configuration changes.
-   */
-  shouldTestAfterChanges(): boolean {
-    return this.testAfterChanges;
-  }
-
-  /**
-   * Enable or disable automatic post-change testing.
-   */
-  setTestAfterChanges(enabled: boolean): void {
-    this.testAfterChanges = enabled;
-  }
-
-  /**
-   * Return a serializable representation of the configuration.
-   *
-   * This is intentionally limited to global configuration.
-   * Game profiles are stored separately.
-   */
-  toJSON(): Record<string, unknown> {
+  toJSON(): MacCompatibilityConfigOptions {
     return {
-      compatibilityRoot: this.compatibilityRoot,
-      loggingEnabled: this.loggingEnabled,
-      logLevel: this.logLevel,
-      automaticBackupsEnabled:
-        this.automaticBackupsEnabled,
-      automaticRepairEnabled:
-        this.automaticRepairEnabled,
-      testAfterChanges: this.testAfterChanges,
+      rootPath: this.rootPath,
+      automaticBackups:
+        this.automaticBackups,
+      automaticRestoreOnFailure:
+        this.automaticRestoreOnFailure,
+      loggingEnabled:
+        this.loggingEnabled,
+      maxBackupsPerGame:
+        this.maxBackupsPerGame,
     };
   }
 }
