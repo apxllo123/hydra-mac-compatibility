@@ -3,19 +3,9 @@
  *
  * Safe repair coordinator for Windows game compatibility.
  *
- * Repair operations should always prefer:
- *
- *     Backup
- *       ↓
- *     Change
- *       ↓
- *     Test
- *       ↓
- *     Keep or Restore
- *
- * This class currently provides the orchestration layer.
- * Actual Wine, dependency, graphics, and filesystem repair
- * operations will be connected during integration.
+ * Repair operations should always prefer reversible changes.
+ * Actual filesystem, Wine, dependency, and graphics repairs
+ * will be connected through their respective subsystems.
  */
 
 import {
@@ -23,110 +13,114 @@ import {
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
+import { MacCompatibilityBackups } from "../storage/MacCompatibilityBackups";
+import { MacCompatibilityDiagnostics } from "./MacCompatibilityDiagnostics";
+import { MacCompatibilityTester } from "./MacCompatibilityTester";
+
 export class MacCompatibilityRepair {
+  private readonly backups: MacCompatibilityBackups;
+  private readonly diagnostics: MacCompatibilityDiagnostics;
+  private readonly tester: MacCompatibilityTester;
+
+  constructor(
+    backups = new MacCompatibilityBackups(),
+    diagnostics = new MacCompatibilityDiagnostics(),
+    tester = new MacCompatibilityTester(
+      diagnostics,
+    ),
+  ) {
+    this.backups = backups;
+    this.diagnostics = diagnostics;
+    this.tester = tester;
+  }
+
   /**
-   * Perform a safe profile-level repair attempt.
+   * Run a safe repair attempt.
    *
-   * At this stage, repair only identifies configuration
-   * problems that can be safely corrected without modifying
-   * the user's game files.
+   * The current implementation creates a backup and
+   * validates the configuration. Actual repair operations
+   * will be connected once the underlying subsystems are
+   * operational.
    */
   repair(
     profile: MacGameCompatibilityProfile,
+    reason = "compatibility-repair",
   ): CompatibilityRepairResult {
-    const repaired: string[] = [];
-    const failures: string[] = [];
-
-    if (!profile.gameId) {
-      failures.push(
-        "Game ID is missing.",
+    const backup =
+      this.backups.create(
+        profile,
+        reason,
       );
+
+    const diagnostics =
+      this.diagnostics.diagnose(
+        profile,
+      );
+
+    if (!diagnostics.healthy) {
+      return {
+        gameId: profile.gameId,
+        success: false,
+        repairedAt:
+          new Date().toISOString(),
+        message:
+          "Repair could not safely proceed because compatibility problems remain unresolved.",
+        backupId: backup.id,
+      };
     }
 
-    if (!profile.gameName) {
-      failures.push(
-        "Game name is missing.",
+    const test =
+      this.tester.test(
+        profile,
       );
-    }
 
-    if (!profile.gamePath) {
-      failures.push(
-        "Game installation path is not configured.",
-      );
-    }
-
-    if (!profile.wine) {
-      failures.push(
-        "Wine configuration is missing.",
-      );
-    } else {
-      if (!profile.wine.version) {
-        failures.push(
-          "Wine version is not configured.",
-        );
-      }
-
-      if (!profile.wine.prefixPath) {
-        failures.push(
-          "Wine prefix is not configured.",
-        );
-      }
-    }
-
-    if (!profile.graphics) {
-      failures.push(
-        "Graphics configuration is missing.",
-      );
-    }
-
-    const success =
-      failures.length === 0;
-
-    if (success) {
-      repaired.push(
-        "Profile-level compatibility configuration verified.",
-      );
+    if (!test.passed) {
+      return {
+        gameId: profile.gameId,
+        success: false,
+        repairedAt:
+          new Date().toISOString(),
+        message:
+          "The compatibility test failed after the repair attempt.",
+        backupId: backup.id,
+      };
     }
 
     return {
       gameId: profile.gameId,
-      success,
-      repairedAt: new Date().toISOString(),
-      repaired,
-      failures,
-      backupCreated: false,
+      success: true,
+      repairedAt:
+        new Date().toISOString(),
+      message:
+        "Compatibility configuration passed validation.",
+      backupId: backup.id,
     };
   }
 
   /**
-   * Determine whether the repair operation succeeded.
+   * Restore a game profile from a backup.
+   *
+   * The caller is responsible for applying the returned
+   * profile to the active game configuration.
    */
-  wasSuccessful(
-    result: CompatibilityRepairResult,
-  ): boolean {
-    return result.success;
+  restore(
+    gameId: string,
+    backupId: string,
+  ): MacGameCompatibilityProfile | undefined {
+    return this.backups.restore(
+      gameId,
+      backupId,
+    );
   }
 
   /**
-   * Return a human-readable repair summary.
+   * Return the latest backup for a game.
    */
-  getSummary(
-    result: CompatibilityRepairResult,
-  ): string {
-    if (result.success) {
-      return [
-        "Repair completed successfully.",
-        ...result.repaired.map(
-          (item) => `- ${item}`,
-        ),
-      ].join("\n");
-    }
-
-    return [
-      "Repair could not be completed:",
-      ...result.failures.map(
-        (failure) => `- ${failure}`,
-      ),
-    ].join("\n");
+  getLatestBackup(
+    gameId: string,
+  ) {
+    return this.backups.getLatest(
+      gameId,
+    );
   }
 }
