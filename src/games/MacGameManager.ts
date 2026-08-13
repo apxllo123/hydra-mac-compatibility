@@ -1,14 +1,15 @@
 /**
  * Hydra Mac Compatibility
  *
- * Central coordinator for Windows game compatibility profiles.
+ * Coordinates Windows game compatibility profiles.
  *
- * The game manager owns game-profile operations.
- * It does not handle Wine, dependencies, graphics, diagnostics,
- * or filesystem persistence directly.
+ * The game manager is responsible for game-level operations.
+ * It does not directly manage Wine, dependencies, graphics,
+ * diagnostics, or filesystem persistence.
  */
 
 import {
+  CompatibilityStatus,
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
@@ -25,20 +26,20 @@ export class MacGameManager {
   }
 
   /**
-   * Register a new game.
+   * Create a new game compatibility profile.
    */
-  register(
+  createProfile(
     profile: MacGameCompatibilityProfile,
   ): MacGameProfile {
-    return this.store.add(
+    return this.store.create(
       profile,
     );
   }
 
   /**
-   * Register or replace a game.
+   * Add or replace a game compatibility profile.
    */
-  upsert(
+  upsertProfile(
     profile: MacGameCompatibilityProfile,
   ): MacGameProfile {
     return this.store.upsert(
@@ -47,9 +48,9 @@ export class MacGameManager {
   }
 
   /**
-   * Retrieve a game by stable ID.
+   * Retrieve a game's compatibility profile.
    */
-  get(
+  getProfile(
     gameId: string,
   ): MacGameProfile | undefined {
     return this.store.get(
@@ -58,9 +59,9 @@ export class MacGameManager {
   }
 
   /**
-   * Determine whether a game is registered.
+   * Check whether a game has a compatibility profile.
    */
-  has(
+  hasProfile(
     gameId: string,
   ): boolean {
     return this.store.has(
@@ -69,11 +70,11 @@ export class MacGameManager {
   }
 
   /**
-   * Remove a game from the manager.
+   * Remove a game's compatibility profile.
    *
-   * This does NOT delete game files.
+   * This does not delete the game's files.
    */
-  remove(
+  removeProfile(
     gameId: string,
   ): boolean {
     return this.store.remove(
@@ -82,10 +83,17 @@ export class MacGameManager {
   }
 
   /**
-   * Return all registered games.
+   * Return all registered game profiles.
    */
-  getAll(): MacGameProfile[] {
+  getProfiles(): MacGameProfile[] {
     return this.store.getAll();
+  }
+
+  /**
+   * Return the number of registered games.
+   */
+  getProfileCount(): number {
+    return this.store.count();
   }
 
   /**
@@ -100,16 +108,59 @@ export class MacGameManager {
   }
 
   /**
-   * Return the number of registered games.
+   * Find games by compatibility status.
    */
-  count(): number {
-    return this.store.count();
+  findByStatus(
+    status: CompatibilityStatus,
+  ): MacGameProfile[] {
+    return this.getProfiles().filter(
+      (profile) =>
+        profile.getStatus() === status,
+    );
   }
 
   /**
-   * Clear the in-memory game registry.
+   * Update a game's compatibility status.
+   */
+  setStatus(
+    gameId: string,
+    status: CompatibilityStatus,
+  ): boolean {
+    const profile =
+      this.getProfile(gameId);
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setStatus(
+      status,
+    );
+
+    return true;
+  }
+
+  /**
+   * Export all profiles for persistence.
+   */
+  exportProfiles(): MacGameCompatibilityProfile[] {
+    return this.store.exportAll();
+  }
+
+  /**
+   * Get the underlying profile store.
    *
-   * This does NOT delete game data from disk.
+   * Exposed so the storage layer can be connected later
+   * without putting filesystem logic inside this manager.
+   */
+  getStore(): MacGameProfileStore {
+    return this.store;
+  }
+
+  /**
+   * Clear all in-memory profiles.
+   *
+   * This does not delete game files.
    */
   clear(): void {
     this.store.clear();
