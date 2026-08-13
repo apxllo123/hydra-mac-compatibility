@@ -1,14 +1,15 @@
 /**
  * Hydra Mac Compatibility
  *
- * Persistent storage coordination for game compatibility profiles.
+ * In-memory store for game compatibility profiles.
  *
- * This class sits between the game profile model and the filesystem.
- * The actual filesystem implementation will be connected as the
- * project is integrated into Hydra.
+ * This class manages profile storage independently from the
+ * filesystem. Persistent storage will be connected through
+ * the storage subsystem later.
  */
 
 import {
+  CompatibilityStatus,
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
@@ -17,85 +18,132 @@ import { MacGameProfile } from "./MacGameProfile";
 export class MacGameProfileStore {
   private readonly profiles = new Map<
     string,
-    MacGameCompatibilityProfile
+    MacGameProfile
   >();
 
   /**
-   * Save a game profile to the in-memory store.
-   *
-   * Persistent JSON storage will be connected later.
+   * Add a new game profile.
    */
-  save(
+  add(
     profile: MacGameCompatibilityProfile,
-  ): void {
+  ): MacGameProfile {
+    if (
+      this.profiles.has(
+        profile.gameId,
+      )
+    ) {
+      throw new Error(
+        `A game profile already exists for "${profile.gameId}".`,
+      );
+    }
+
+    const gameProfile =
+      new MacGameProfile(
+        profile,
+      );
+
     this.profiles.set(
       profile.gameId,
-      this.cloneProfile(profile),
+      gameProfile,
+    );
+
+    return gameProfile;
+  }
+
+  /**
+   * Add or replace an existing profile.
+   */
+  upsert(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameProfile {
+    const gameProfile =
+      new MacGameProfile(
+        profile,
+      );
+
+    this.profiles.set(
+      profile.gameId,
+      gameProfile,
+    );
+
+    return gameProfile;
+  }
+
+  /**
+   * Retrieve a game profile.
+   */
+  get(
+    gameId: string,
+  ): MacGameProfile | undefined {
+    return this.profiles.get(
+      gameId,
     );
   }
 
   /**
-   * Save a MacGameProfile model.
+   * Check whether a game exists.
    */
-  saveModel(
-    profile: MacGameProfile,
-  ): void {
-    this.save(profile.toProfile());
-  }
-
-  /**
-   * Load a game profile by its stable game ID.
-   */
-  load(
+  has(
     gameId: string,
-  ): MacGameCompatibilityProfile | undefined {
-    const profile = this.profiles.get(gameId);
-
-    if (!profile) {
-      return undefined;
-    }
-
-    return this.cloneProfile(profile);
+  ): boolean {
+    return this.profiles.has(
+      gameId,
+    );
   }
 
   /**
-   * Load a game profile as a MacGameProfile model.
-   */
-  loadModel(
-    gameId: string,
-  ): MacGameProfile | undefined {
-    const profile = this.load(gameId);
-
-    if (!profile) {
-      return undefined;
-    }
-
-    return new MacGameProfile(profile);
-  }
-
-  /**
-   * Check whether a stored profile exists.
-   */
-  exists(gameId: string): boolean {
-    return this.profiles.has(gameId);
-  }
-
-  /**
-   * Delete a stored profile.
+   * Remove a game profile.
    *
-   * This only removes the profile from the store.
-   * It does NOT delete the game's compatibility directory.
+   * This does NOT delete files from disk.
    */
-  delete(gameId: string): boolean {
-    return this.profiles.delete(gameId);
+  remove(
+    gameId: string,
+  ): boolean {
+    return this.profiles.delete(
+      gameId,
+    );
   }
 
   /**
-   * Return all stored profiles.
+   * Return every stored game profile.
    */
-  getAll(): MacGameCompatibilityProfile[] {
-    return Array.from(this.profiles.values()).map(
-      (profile) => this.cloneProfile(profile),
+  getAll(): MacGameProfile[] {
+    return Array.from(
+      this.profiles.values(),
+    );
+  }
+
+  /**
+   * Find profiles by compatibility status.
+   */
+  findByStatus(
+    status: CompatibilityStatus,
+  ): MacGameProfile[] {
+    return this.getAll().filter(
+      (profile) =>
+        profile.getStatus() ===
+        status,
+    );
+  }
+
+  /**
+   * Find a profile by its human-readable game name.
+   */
+  findByGameName(
+    gameName: string,
+  ): MacGameProfile | undefined {
+    const normalizedName =
+      gameName
+        .trim()
+        .toLowerCase();
+
+    return this.getAll().find(
+      (profile) =>
+        profile
+          .getGameName()
+          .trim()
+          .toLowerCase() ===
+        normalizedName,
     );
   }
 
@@ -107,104 +155,11 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Remove every stored profile.
+   * Remove every in-memory profile.
+   *
+   * This does NOT delete game data from disk.
    */
   clear(): void {
     this.profiles.clear();
-  }
-
-  /**
-   * Create a safe copy of a profile.
-   *
-   * This prevents callers from accidentally modifying the
-   * stored profile without explicitly saving the changes.
-   */
-  private cloneProfile(
-    profile: MacGameCompatibilityProfile,
-  ): MacGameCompatibilityProfile {
-    return {
-      ...profile,
-
-      wine: {
-        ...profile.wine,
-      },
-
-      graphics: {
-        ...profile.graphics,
-
-        environmentVariables: {
-          ...profile.graphics.environmentVariables,
-        },
-
-        compatibilityFlags: [
-          ...profile.graphics.compatibilityFlags,
-        ],
-      },
-
-      dependencies: profile.dependencies.map(
-        (dependency) => ({
-          ...dependency,
-        }),
-      ),
-
-      backups: profile.backups.map(
-        (backup) => ({
-          ...backup,
-        }),
-      ),
-
-      lastKnownGoodConfiguration:
-        profile.lastKnownGoodConfiguration
-          ? {
-              ...profile.lastKnownGoodConfiguration,
-
-              wine:
-                profile
-                  .lastKnownGoodConfiguration
-                  .wine
-                  ? {
-                      ...profile
-                        .lastKnownGoodConfiguration
-                        .wine,
-                    }
-                  : undefined,
-
-              graphics:
-                profile
-                  .lastKnownGoodConfiguration
-                  .graphics
-                  ? {
-                      ...profile
-                        .lastKnownGoodConfiguration
-                        .graphics,
-
-                      environmentVariables: {
-                        ...profile
-                          .lastKnownGoodConfiguration
-                          .graphics
-                          .environmentVariables,
-                      },
-
-                      compatibilityFlags: [
-                        ...profile
-                          .lastKnownGoodConfiguration
-                          .graphics
-                          .compatibilityFlags,
-                      ],
-                    }
-                  : undefined,
-
-              dependencies:
-                profile
-                  .lastKnownGoodConfiguration
-                  .dependencies
-                  .map(
-                    (dependency) => ({
-                      ...dependency,
-                    }),
-                  ),
-            }
-          : undefined,
-    };
   }
 }
