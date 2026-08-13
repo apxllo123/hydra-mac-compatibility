@@ -1,248 +1,132 @@
 /**
  * Hydra Mac Compatibility
  *
- * Controlled repair operations for Windows game compatibility
- * environments on macOS.
+ * Safe repair coordinator for Windows game compatibility.
  *
- * IMPORTANT:
- * Repairs are intentionally conservative.
- * This class does not delete game data, reinstall Wine,
- * or make destructive changes automatically.
+ * Repair operations should always prefer:
+ *
+ *     Backup
+ *       ↓
+ *     Change
+ *       ↓
+ *     Test
+ *       ↓
+ *     Keep or Restore
+ *
+ * This class currently provides the orchestration layer.
+ * Actual Wine, dependency, graphics, and filesystem repair
+ * operations will be connected during integration.
  */
 
-import { promises as fs } from "node:fs";
-
-import type {
+import {
+  CompatibilityRepairResult,
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
-import {
-  MacCompatibilityPaths,
-} from "../storage/MacCompatibilityPaths";
-
-export type CompatibilityRepairAction =
-  | "create-game-directory"
-  | "create-prefix-directory"
-  | "create-config-directory"
-  | "create-dependencies-directory"
-  | "create-graphics-directory"
-  | "create-logs-directory"
-  | "create-backups-directory"
-  | "reset-status";
-
-export interface CompatibilityRepairRequest {
-  action: CompatibilityRepairAction;
-}
-
-export interface CompatibilityRepairResult {
-  action: CompatibilityRepairAction;
-  success: boolean;
-  message: string;
-}
-
 export class MacCompatibilityRepair {
-  private readonly paths: MacCompatibilityPaths;
-
-  constructor(
-    paths: MacCompatibilityPaths,
-  ) {
-    this.paths = paths;
-  }
-
   /**
-   * Execute a single safe repair operation.
-   */
-  async repair(
-    profile: MacGameCompatibilityProfile,
-    request: CompatibilityRepairRequest,
-  ): Promise<CompatibilityRepairResult> {
-    try {
-      switch (request.action) {
-        case "create-game-directory":
-          await this.createDirectory(
-            this.paths.getGamePath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Game compatibility directory is ready.",
-          );
-
-        case "create-prefix-directory":
-          await this.createDirectory(
-            this.paths.getGamePrefixPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Wine prefix directory is ready.",
-          );
-
-        case "create-config-directory":
-          await this.createDirectory(
-            this.paths.getGameConfigPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Game configuration directory is ready.",
-          );
-
-        case "create-dependencies-directory":
-          await this.createDirectory(
-            this.paths.getGameDependenciesPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Dependencies directory is ready.",
-          );
-
-        case "create-graphics-directory":
-          await this.createDirectory(
-            this.paths.getGameGraphicsPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Graphics configuration directory is ready.",
-          );
-
-        case "create-logs-directory":
-          await this.createDirectory(
-            this.paths.getGameLogsPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Logs directory is ready.",
-          );
-
-        case "create-backups-directory":
-          await this.createDirectory(
-            this.paths.getGameBackupsPath(
-              profile.gameName,
-            ),
-          );
-
-          return this.success(
-            request.action,
-            "Backups directory is ready.",
-          );
-
-        case "reset-status":
-          return this.success(
-            request.action,
-            "The compatibility status can be reset by the game manager.",
-          );
-
-        default:
-          return {
-            action: request.action,
-            success: false,
-            message:
-              "Unsupported compatibility repair action.",
-          };
-      }
-    } catch (error) {
-      return {
-        action: request.action,
-        success: false,
-        message:
-          this.getErrorMessage(
-            error,
-          ),
-      };
-    }
-  }
-
-  /**
-   * Create every safe directory belonging to a game.
+   * Perform a safe profile-level repair attempt.
    *
-   * This does NOT create or initialize an actual Wine prefix.
+   * At this stage, repair only identifies configuration
+   * problems that can be safely corrected without modifying
+   * the user's game files.
    */
-  async prepareGameDirectories(
+  repair(
     profile: MacGameCompatibilityProfile,
-  ): Promise<CompatibilityRepairResult[]> {
-    const actions:
-      CompatibilityRepairAction[] = [
-        "create-game-directory",
-        "create-prefix-directory",
-        "create-config-directory",
-        "create-dependencies-directory",
-        "create-graphics-directory",
-        "create-logs-directory",
-        "create-backups-directory",
-      ];
+  ): CompatibilityRepairResult {
+    const repaired: string[] = [];
+    const failures: string[] = [];
 
-    const results: CompatibilityRepairResult[] = [];
-
-    for (
-      const action of actions
-    ) {
-      results.push(
-        await this.repair(
-          profile,
-          { action },
-        ),
+    if (!profile.gameId) {
+      failures.push(
+        "Game ID is missing.",
       );
     }
 
-    return results;
-  }
+    if (!profile.gameName) {
+      failures.push(
+        "Game name is missing.",
+      );
+    }
 
-  /**
-   * Create a directory safely.
-   */
-  private async createDirectory(
-    directoryPath: string,
-  ): Promise<void> {
-    await fs.mkdir(
-      directoryPath,
-      {
-        recursive: true,
-      },
-    );
-  }
+    if (!profile.gamePath) {
+      failures.push(
+        "Game installation path is not configured.",
+      );
+    }
 
-  /**
-   * Build a successful repair result.
-   */
-  private success(
-    action: CompatibilityRepairAction,
-    message: string,
-  ): CompatibilityRepairResult {
+    if (!profile.wine) {
+      failures.push(
+        "Wine configuration is missing.",
+      );
+    } else {
+      if (!profile.wine.version) {
+        failures.push(
+          "Wine version is not configured.",
+        );
+      }
+
+      if (!profile.wine.prefixPath) {
+        failures.push(
+          "Wine prefix is not configured.",
+        );
+      }
+    }
+
+    if (!profile.graphics) {
+      failures.push(
+        "Graphics configuration is missing.",
+      );
+    }
+
+    const success =
+      failures.length === 0;
+
+    if (success) {
+      repaired.push(
+        "Profile-level compatibility configuration verified.",
+      );
+    }
+
     return {
-      action,
-      success: true,
-      message,
+      gameId: profile.gameId,
+      success,
+      repairedAt: new Date().toISOString(),
+      repaired,
+      failures,
+      backupCreated: false,
     };
   }
 
   /**
-   * Convert an unknown error into a readable message.
+   * Determine whether the repair operation succeeded.
    */
-  private getErrorMessage(
-    error: unknown,
+  wasSuccessful(
+    result: CompatibilityRepairResult,
+  ): boolean {
+    return result.success;
+  }
+
+  /**
+   * Return a human-readable repair summary.
+   */
+  getSummary(
+    result: CompatibilityRepairResult,
   ): string {
-    if (
-      error instanceof Error
-    ) {
-      return error.message;
+    if (result.success) {
+      return [
+        "Repair completed successfully.",
+        ...result.repaired.map(
+          (item) => `- ${item}`,
+        ),
+      ].join("\n");
     }
 
-    return String(error);
+    return [
+      "Repair could not be completed:",
+      ...result.failures.map(
+        (failure) => `- ${failure}`,
+      ),
+    ].join("\n");
   }
 }
