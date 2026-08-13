@@ -1,13 +1,3 @@
-Absolutely. From now on I’ll give you one single copy-paste block for each file—no splitting it up.
-
-📄 README.md
-
-Create/replace:
-
-hydra-mac-compatibility/README.md
-
-Then paste this entire block:
-
 # Hydra Mac Compatibility
 ## Windows Compatibility for Hydra
 Hydra Mac Compatibility is a dedicated compatibility system designed to allow Windows games to be managed, configured, diagnosed, repaired, and optimized for macOS while maintaining Hydra's existing design, behavior, and user experience.
