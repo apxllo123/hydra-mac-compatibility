@@ -1,11 +1,12 @@
 /**
  * Hydra Mac Compatibility
  *
- * Compatibility diagnostics for Windows games running through
- * Wine on macOS.
+ * Diagnostic coordinator for Windows game compatibility.
  *
- * This class diagnoses problems only.
- * It does not modify the game environment.
+ * Diagnostics identify problems.
+ * They do not modify the game environment.
+ *
+ * Repair is handled separately by MacCompatibilityRepair.
  */
 
 import {
@@ -14,315 +15,137 @@ import {
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
-import {
-  MacWineManager,
-} from "../wine/MacWineManager";
-
 export class MacCompatibilityDiagnostics {
-  private readonly wineManager: MacWineManager;
-
-  constructor(
-    wineManager: MacWineManager,
-  ) {
-    this.wineManager =
-      wineManager;
-  }
-
   /**
-   * Run all currently available diagnostics for a game.
+   * Inspect a game's compatibility profile.
+   *
+   * This performs safe, profile-level checks only.
+   * Actual Wine/prefix/filesystem inspection will be connected
+   * during Hydra integration.
    */
-  async diagnose(
+  diagnose(
     profile: MacGameCompatibilityProfile,
-  ): Promise<CompatibilityDiagnosticResult> {
+  ): CompatibilityDiagnosticResult {
     const diagnostics: CompatibilityDiagnostic[] = [];
 
-    diagnostics.push(
-      ...this.checkGameIdentity(
-        profile,
-      ),
+    if (!profile.gameId) {
+      diagnostics.push({
+        code: "INVALID_GAME_ID",
+        severity: "error",
+        message:
+          "The game does not have a valid game ID.",
+      });
+    }
+
+    if (!profile.gameName) {
+      diagnostics.push({
+        code: "INVALID_GAME_NAME",
+        severity: "error",
+        message:
+          "The game does not have a valid game name.",
+      });
+    }
+
+    if (!profile.gamePath) {
+      diagnostics.push({
+        code: "GAME_PATH_NOT_CONFIGURED",
+        severity: "warning",
+        message:
+          "The game's installation path has not been configured.",
+      });
+    }
+
+    if (!profile.wine) {
+      diagnostics.push({
+        code: "WINE_CONFIGURATION_MISSING",
+        severity: "error",
+        message:
+          "The game does not have a Wine configuration.",
+      });
+    } else {
+      if (!profile.wine.version) {
+        diagnostics.push({
+          code: "WINE_VERSION_MISSING",
+          severity: "error",
+          message:
+            "No Wine version has been selected.",
+        });
+      }
+
+      if (!profile.wine.prefixPath) {
+        diagnostics.push({
+          code: "WINE_PREFIX_MISSING",
+          severity: "error",
+          message:
+            "The game's Wine prefix has not been configured.",
+        });
+      }
+    }
+
+    if (!profile.graphics) {
+      diagnostics.push({
+        code: "GRAPHICS_CONFIGURATION_MISSING",
+        severity: "error",
+        message:
+          "The game does not have a graphics configuration.",
+      });
+    }
+
+    const hasErrors = diagnostics.some(
+      (diagnostic) =>
+        diagnostic.severity === "error" ||
+        diagnostic.severity === "critical",
     );
 
-    diagnostics.push(
-      ...this.checkWine(
-        profile,
-      ),
-    );
-
-    diagnostics.push(
-      ...this.checkGraphics(
-        profile,
-      ),
-    );
-
-    diagnostics.push(
-      ...this.checkDependencies(
-        profile,
-      ),
-    );
-
-    diagnostics.push(
-      ...this.checkProfile(
-        profile,
-      ),
-    );
+    const healthy =
+      diagnostics.length === 0;
 
     return {
       gameId: profile.gameId,
-      checkedAt:
-        new Date().toISOString(),
-      healthy:
-        !diagnostics.some(
-          (diagnostic) =>
-            diagnostic.severity ===
-              "error" ||
-            diagnostic.severity ===
-              "critical",
-        ),
+      healthy,
       diagnostics,
+      checkedAt: new Date().toISOString(),
+      hasErrors,
     };
   }
 
   /**
-   * Verify the game has valid identity information.
+   * Determine whether a profile is healthy.
    */
-  private checkGameIdentity(
+  isHealthy(
     profile: MacGameCompatibilityProfile,
-  ): CompatibilityDiagnostic[] {
-    const diagnostics: CompatibilityDiagnostic[] = [];
-
-    if (!profile.gameId.trim()) {
-      diagnostics.push({
-        id: "game.missing-id",
-        severity: "critical",
-        title: "Game ID is missing",
-        message:
-          "The game does not have a valid stable identifier.",
-        repairable: false,
-      });
-    }
-
-    if (!profile.gameName.trim()) {
-      diagnostics.push({
-        id: "game.missing-name",
-        severity: "critical",
-        title: "Game name is missing",
-        message:
-          "The game does not have a valid display name.",
-        repairable: false,
-      });
-    }
-
-    if (!profile.gamePath.trim()) {
-      diagnostics.push({
-        id: "game.missing-path",
-        severity: "error",
-        title: "Game compatibility path is missing",
-        message:
-          "Hydra does not know where this game's compatibility environment belongs.",
-        repairable: true,
-      });
-    }
-
-    return diagnostics;
+  ): boolean {
+    return this.diagnose(
+      profile,
+    ).healthy;
   }
 
   /**
-   * Verify the game's Wine configuration.
+   * Return only errors and critical problems.
    */
-  private checkWine(
+  getErrors(
     profile: MacGameCompatibilityProfile,
   ): CompatibilityDiagnostic[] {
-    const diagnostics: CompatibilityDiagnostic[] = [];
-
-    if (!profile.wine.version.trim()) {
-      diagnostics.push({
-        id: "wine.missing-version",
-        severity: "error",
-        title: "Wine version is missing",
-        message:
-          "No Wine version has been assigned to this game.",
-        repairable: true,
-      });
-    }
-
-    if (!profile.wine.path.trim()) {
-      diagnostics.push({
-        id: "wine.missing-path",
-        severity: "error",
-        title: "Wine executable is missing",
-        message:
-          "The game does not have a Wine executable assigned.",
-        repairable: true,
-      });
-    }
-
-    if (!profile.wine.prefixPath.trim()) {
-      diagnostics.push({
-        id: "wine.missing-prefix",
-        severity: "error",
-        title: "Wine prefix is missing",
-        message:
-          "The game does not have a Wine prefix assigned.",
-        repairable: true,
-      });
-    }
-
-    /*
-     * If Wine has been detected, verify that the configured
-     * executable is one of the detected installations.
-     */
-    if (
-      profile.wine.path &&
-      this.wineManager.isWineAvailable() &&
-      !this.wineManager.hasExecutable(
-        profile.wine.path,
-      )
-    ) {
-      diagnostics.push({
-        id: "wine.executable-not-detected",
-        severity: "warning",
-        title: "Configured Wine executable was not detected",
-        message:
-          "The game's configured Wine executable is not among the Wine installations currently detected on this Mac.",
-        repairable: true,
-      });
-    }
-
-    return diagnostics;
+    return this.diagnose(
+      profile,
+    ).diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.severity === "error" ||
+        diagnostic.severity === "critical",
+    );
   }
 
   /**
-   * Verify the game's graphics configuration.
+   * Return only warnings.
    */
-  private checkGraphics(
+  getWarnings(
     profile: MacGameCompatibilityProfile,
   ): CompatibilityDiagnostic[] {
-    const diagnostics: CompatibilityDiagnostic[] = [];
-
-    if (
-      profile.graphics.backend ===
-      undefined
-    ) {
-      diagnostics.push({
-        id: "graphics.missing-backend",
-        severity: "error",
-        title: "Graphics backend is missing",
-        message:
-          "The game does not have a graphics backend configured.",
-        repairable: true,
-      });
-    }
-
-    if (
-      profile.graphics.dxvkEnabled &&
-      profile.graphics.vkd3dEnabled
-    ) {
-      diagnostics.push({
-        id: "graphics.multiple-translation-layers",
-        severity: "info",
-        title:
-          "Multiple DirectX translation layers are enabled",
-        message:
-          "DXVK and VKD3D are both enabled. This can be valid because they target different DirectX versions, but the game should be tested with this configuration.",
-        repairable: false,
-      });
-    }
-
-    return diagnostics;
-  }
-
-  /**
-   * Verify dependency information.
-   */
-  private checkDependencies(
-    profile: MacGameCompatibilityProfile,
-  ): CompatibilityDiagnostic[] {
-    const diagnostics: CompatibilityDiagnostic[] = [];
-
-    for (
-      const dependency of
-        profile.installedDependencies
-    ) {
-      if (!dependency.id.trim()) {
-        diagnostics.push({
-          id: "dependency.missing-id",
-          severity: "warning",
-          title:
-            "Dependency has no identifier",
-          message:
-            "An installed dependency is missing its stable identifier.",
-          repairable: true,
-        });
-      }
-
-      if (!dependency.name.trim()) {
-        diagnostics.push({
-          id: "dependency.missing-name",
-          severity: "warning",
-          title:
-            "Dependency has no name",
-          message:
-            "An installed dependency is missing its display name.",
-          repairable: true,
-        });
-      }
-
-      if (!dependency.installed) {
-        diagnostics.push({
-          id: `dependency.not-installed.${dependency.id}`,
-          severity: "warning",
-          title:
-            `Dependency "${dependency.name}" is not installed`,
-          message:
-            "The profile lists this dependency, but it is not currently marked as installed.",
-          repairable: true,
-        });
-      }
-    }
-
-    return diagnostics;
-  }
-
-  /**
-   * Verify the compatibility profile itself.
-   */
-  private checkProfile(
-    profile: MacGameCompatibilityProfile,
-  ): CompatibilityDiagnostic[] {
-    const diagnostics: CompatibilityDiagnostic[] = [];
-
-    if (
-      !Number.isInteger(
-        profile.schemaVersion,
-      ) ||
-      profile.schemaVersion < 1
-    ) {
-      diagnostics.push({
-        id: "profile.invalid-schema",
-        severity: "error",
-        title:
-          "Invalid compatibility profile version",
-        message:
-          "The compatibility profile has an invalid schema version.",
-        repairable: true,
-      });
-    }
-
-    if (
-      profile.status ===
-      "unknown"
-    ) {
-      diagnostics.push({
-        id: "profile.not-tested",
-        severity: "info",
-        title:
-          "Game has not been verified",
-        message:
-          "This game's compatibility environment has not yet been verified by Hydra.",
-        repairable: false,
-      });
-    }
-
-    return diagnostics;
+    return this.diagnose(
+      profile,
+    ).diagnostics.filter(
+      (diagnostic) =>
+        diagnostic.severity === "warning",
+    );
   }
 }
