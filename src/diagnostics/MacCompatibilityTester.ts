@@ -4,8 +4,7 @@
  * Compatibility test coordinator for Windows games on macOS.
  *
  * The tester determines whether a compatibility configuration
- * appears to work. It does not perform repairs or change the
- * configuration automatically.
+ * appears usable. It does not permanently modify configuration.
  */
 
 import {
@@ -13,107 +12,61 @@ import {
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
+import { MacCompatibilityDiagnostics } from "./MacCompatibilityDiagnostics";
+
 export class MacCompatibilityTester {
+  private readonly diagnostics: MacCompatibilityDiagnostics;
+
+  constructor(
+    diagnostics = new MacCompatibilityDiagnostics(),
+  ) {
+    this.diagnostics = diagnostics;
+  }
+
   /**
-   * Run a safe profile-level compatibility test.
+   * Run a compatibility test for a game.
    *
-   * Real Wine/game launching will be connected during
-   * macOS integration.
+   * The current implementation performs a configuration
+   * and diagnostic validation. Actual Wine/game launching
+   * will be connected during Hydra integration.
    */
   test(
     profile: MacGameCompatibilityProfile,
   ): CompatibilityTestResult {
-    const failures: string[] = [];
-
-    if (!profile.gameId) {
-      failures.push(
-        "Game ID is missing.",
+    const diagnosticResult =
+      this.diagnostics.diagnose(
+        profile,
       );
-    }
-
-    if (!profile.gameName) {
-      failures.push(
-        "Game name is missing.",
-      );
-    }
-
-    if (!profile.gamePath) {
-      failures.push(
-        "Game installation path is not configured.",
-      );
-    }
-
-    if (!profile.wine) {
-      failures.push(
-        "Wine configuration is missing.",
-      );
-    } else {
-      if (!profile.wine.version) {
-        failures.push(
-          "Wine version is not configured.",
-        );
-      }
-
-      if (!profile.wine.prefixPath) {
-        failures.push(
-          "Wine prefix is not configured.",
-        );
-      }
-    }
-
-    if (!profile.graphics) {
-      failures.push(
-        "Graphics configuration is missing.",
-      );
-    }
 
     const passed =
-      failures.length === 0;
+      diagnosticResult.healthy;
 
     return {
       gameId: profile.gameId,
       passed,
-      testedAt: new Date().toISOString(),
-      durationMs: 0,
-      message: passed
-        ? "Compatibility configuration passed the profile-level test."
-        : "Compatibility configuration failed the profile-level test.",
-      failures,
+      testedAt:
+        new Date().toISOString(),
+      diagnostics:
+        diagnosticResult.diagnostics,
     };
   }
 
   /**
-   * Determine whether a game passes the compatibility test.
+   * Run a lightweight configuration test.
    */
-  isPassing(
+  testConfiguration(
     profile: MacGameCompatibilityProfile,
-  ): boolean {
-    return this.test(
-      profile,
-    ).passed;
+  ): CompatibilityTestResult {
+    return this.test(profile);
   }
 
   /**
-   * Return a human-readable test summary.
+   * Determine whether a previous test result indicates
+   * that the game passed.
    */
-  getSummary(
-    profile: MacGameCompatibilityProfile,
-  ): string {
-    const result =
-      this.test(profile);
-
-    if (result.passed) {
-      return (
-        "Compatibility configuration is ready for testing."
-      );
-    }
-
-    return [
-      "Compatibility configuration needs attention:",
-      ...result.failures.map(
-        (failure) =>
-          `- ${failure}`,
-      ),
-    ].join("\n");
+  didPass(
+    result: CompatibilityTestResult,
+  ): boolean {
+    return result.passed;
   }
 }
