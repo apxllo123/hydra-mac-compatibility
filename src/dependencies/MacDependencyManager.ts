@@ -1,233 +1,133 @@
 /**
  * Hydra Mac Compatibility
  *
- * Coordinates Windows game dependencies used by Wine.
+ * Central coordinator for Windows dependency management.
  *
- * The manager tracks what a game needs and what has been
- * installed. Actual detection and installation are handled
- * by separate dependency components.
+ * The manager connects dependency detection and installation
+ * without putting low-level dependency logic into one giant class.
  */
 
-import type {
+import {
   MacDependency,
-  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
-export interface DependencyRequirement {
-  /**
-   * Stable dependency identifier.
-   */
-  id: string;
-
-  /**
-   * Human-readable dependency name.
-   */
-  name: string;
-
-  /**
-   * Optional version requirement.
-   */
-  version?: string;
-
-  /**
-   * Whether this dependency is required for the game.
-   */
-  required: boolean;
-}
-
-export interface DependencyStatus {
-  dependency: DependencyRequirement;
-
-  installed: boolean;
-
-  installedVersion?: string;
-}
+import { MacDependencyDetector } from "./MacDependencyDetector";
+import { MacDependencyInstaller } from "./MacDependencyInstaller";
 
 export class MacDependencyManager {
-  /**
-   * Return all dependencies currently recorded
-   * in a game's compatibility profile.
-   */
-  getInstalledDependencies(
-    profile: MacGameCompatibilityProfile,
-  ): MacDependency[] {
-    return [
-      ...profile.installedDependencies,
-    ];
+  private readonly detector: MacDependencyDetector;
+  private readonly installer: MacDependencyInstaller;
+
+  constructor(
+    detector: MacDependencyDetector =
+      new MacDependencyDetector(),
+    installer: MacDependencyInstaller =
+      new MacDependencyInstaller(),
+  ) {
+    this.detector = detector;
+    this.installer = installer;
   }
 
   /**
-   * Determine whether a dependency is already recorded
-   * as installed.
+   * Detect dependencies currently associated with a game.
    */
-  isDependencyInstalled(
-    profile: MacGameCompatibilityProfile,
-    dependencyId: string,
-  ): boolean {
-    return profile.installedDependencies.some(
-      (dependency) =>
-        dependency.id ===
-          dependencyId &&
-        dependency.installed,
+  detect(
+    gameId: string,
+    prefixPath: string,
+  ): MacDependency[] {
+    return this.detector.detect(
+      gameId,
+      prefixPath,
     );
   }
 
   /**
-   * Add a dependency to the game's compatibility profile.
-   *
-   * This does not install anything.
+   * Check whether a dependency is installed.
    */
-  addDependency(
-    profile: MacGameCompatibilityProfile,
+  isInstalled(
+    gameId: string,
+    prefixPath: string,
+    dependencyId: string,
+  ): boolean {
+    return this.detector.isInstalled(
+      gameId,
+      prefixPath,
+      dependencyId,
+    );
+  }
+
+  /**
+   * Determine which dependencies are supported
+   * by the installation layer.
+   */
+  getInstallableDependencies(
+    dependencies: MacDependency[],
+  ): MacDependency[] {
+    return dependencies.filter(
+      (dependency) =>
+        this.installer.canInstall(
+          dependency,
+        ),
+    );
+  }
+
+  /**
+   * Request installation of one dependency.
+   *
+   * The installer performs the actual operation.
+   */
+  install(
+    gameId: string,
+    prefixPath: string,
     dependency: MacDependency,
-  ): void {
-    const existingIndex =
-      profile.installedDependencies.findIndex(
-        (existing) =>
-          existing.id ===
-          dependency.id,
-      );
-
+  ): boolean {
     if (
-      existingIndex >= 0
+      !this.installer.canInstall(
+        dependency,
+      )
     ) {
-      profile.installedDependencies[
-        existingIndex
-      ] = dependency;
-
-      return;
+      return false;
     }
 
-    profile.installedDependencies.push(
+    return this.installer.install(
+      gameId,
+      prefixPath,
       dependency,
     );
   }
 
   /**
-   * Remove a dependency from the compatibility profile.
-   *
-   * This does not uninstall anything from Wine.
+   * Request installation of multiple dependencies.
    */
-  removeDependency(
-    profile: MacGameCompatibilityProfile,
-    dependencyId: string,
-  ): boolean {
-    const originalLength =
-      profile.installedDependencies.length;
-
-    profile.installedDependencies =
-      profile.installedDependencies.filter(
-        (dependency) =>
-          dependency.id !==
-          dependencyId,
+  installAll(
+    gameId: string,
+    prefixPath: string,
+    dependencies: MacDependency[],
+  ): MacDependency[] {
+    const installable =
+      this.getInstallableDependencies(
+        dependencies,
       );
 
-    return (
-      profile.installedDependencies.length !==
-      originalLength
+    return this.installer.installAll(
+      gameId,
+      prefixPath,
+      installable,
     );
   }
 
   /**
-   * Mark an existing dependency as installed.
+   * Find a dependency by ID.
    */
-  markInstalled(
-    profile: MacGameCompatibilityProfile,
+  find(
+    gameId: string,
+    prefixPath: string,
     dependencyId: string,
-    version?: string,
-  ): boolean {
-    const dependency =
-      profile.installedDependencies.find(
-        (item) =>
-          item.id ===
-          dependencyId,
-      );
-
-    if (!dependency) {
-      return false;
-    }
-
-    dependency.installed =
-      true;
-
-    if (version !== undefined) {
-      dependency.version =
-        version;
-    }
-
-    return true;
-  }
-
-  /**
-   * Mark an existing dependency as not installed.
-   */
-  markNotInstalled(
-    profile: MacGameCompatibilityProfile,
-    dependencyId: string,
-  ): boolean {
-    const dependency =
-      profile.installedDependencies.find(
-        (item) =>
-          item.id ===
-          dependencyId,
-      );
-
-    if (!dependency) {
-      return false;
-    }
-
-    dependency.installed =
-      false;
-
-    return true;
-  }
-
-  /**
-   * Compare the game's required dependencies against
-   * the dependencies currently recorded in its profile.
-   */
-  getDependencyStatus(
-    profile: MacGameCompatibilityProfile,
-    requirements: DependencyRequirement[],
-  ): DependencyStatus[] {
-    return requirements.map(
-      (requirement) => {
-        const installed =
-          profile.installedDependencies.find(
-            (dependency) =>
-              dependency.id ===
-              requirement.id,
-          );
-
-        return {
-          dependency:
-            requirement,
-
-          installed:
-            installed?.installed ??
-            false,
-
-          installedVersion:
-            installed?.version,
-        };
-      },
-    );
-  }
-
-  /**
-   * Return dependencies that are required but not installed.
-   */
-  getMissingRequiredDependencies(
-    profile: MacGameCompatibilityProfile,
-    requirements: DependencyRequirement[],
-  ): DependencyRequirement[] {
-    return requirements.filter(
-      (requirement) =>
-        requirement.required &&
-        !this.isDependencyInstalled(
-          profile,
-          requirement.id,
-        ),
+  ): MacDependency | undefined {
+    return this.detector.findById(
+      gameId,
+      prefixPath,
+      dependencyId,
     );
   }
 }
