@@ -1,49 +1,47 @@
 /**
  * Hydra Mac Compatibility
  *
- * Per-game graphics configuration.
+ * Represents the graphics configuration for a Windows game
+ * running through the macOS compatibility layer.
  *
- * Graphics settings belong to the individual game profile
- * and must never be shared accidentally between games.
+ * This class manages graphics configuration only.
+ * It does not apply settings to Wine or the game runtime.
  */
 
 import {
-  MacGraphicsConfiguration,
+  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
 export class MacGraphicsProfile {
-  private configuration: MacGraphicsConfiguration;
+  private graphics: MacGameCompatibilityProfile["graphics"];
 
   constructor(
-    configuration: MacGraphicsConfiguration,
+    graphics: MacGameCompatibilityProfile["graphics"],
   ) {
-    this.configuration =
-      this.clone(configuration);
+    this.graphics = this.clone(graphics);
   }
 
   /**
    * Return the complete graphics configuration.
    */
-  getConfiguration(): MacGraphicsConfiguration {
-    return this.clone(
-      this.configuration,
-    );
+  get(): MacGameCompatibilityProfile["graphics"] {
+    return this.clone(this.graphics);
   }
 
   /**
-   * Return the selected graphics backend.
+   * Return the configured graphics backend.
    */
-  getBackend(): MacGraphicsConfiguration["backend"] {
-    return this.configuration.backend;
+  getBackend(): string {
+    return this.graphics.backend;
   }
 
   /**
    * Change the graphics backend.
    */
   setBackend(
-    backend: MacGraphicsConfiguration["backend"],
+    backend: string,
   ): void {
-    this.configuration.backend =
+    this.graphics.backend =
       backend;
   }
 
@@ -51,7 +49,7 @@ export class MacGraphicsProfile {
    * Determine whether DXVK is enabled.
    */
   isDxvkEnabled(): boolean {
-    return this.configuration.dxvk.enabled;
+    return this.graphics.dxvk.enabled;
   }
 
   /**
@@ -60,15 +58,32 @@ export class MacGraphicsProfile {
   setDxvkEnabled(
     enabled: boolean,
   ): void {
-    this.configuration.dxvk.enabled =
+    this.graphics.dxvk.enabled =
       enabled;
+  }
+
+  /**
+   * Return the configured DXVK version.
+   */
+  getDxvkVersion(): string | undefined {
+    return this.graphics.dxvk.version;
+  }
+
+  /**
+   * Set the DXVK version.
+   */
+  setDxvkVersion(
+    version: string | undefined,
+  ): void {
+    this.graphics.dxvk.version =
+      version;
   }
 
   /**
    * Determine whether VKD3D is enabled.
    */
   isVkd3dEnabled(): boolean {
-    return this.configuration.vkd3d.enabled;
+    return this.graphics.vkd3d.enabled;
   }
 
   /**
@@ -77,39 +92,36 @@ export class MacGraphicsProfile {
   setVkd3dEnabled(
     enabled: boolean,
   ): void {
-    this.configuration.vkd3d.enabled =
+    this.graphics.vkd3d.enabled =
       enabled;
   }
 
   /**
-   * Update the DXVK version.
+   * Return the configured VKD3D version.
    */
-  setDxvkVersion(
-    version?: string,
-  ): void {
-    this.configuration.dxvk.version =
-      version;
+  getVkd3dVersion(): string | undefined {
+    return this.graphics.vkd3d.version;
   }
 
   /**
-   * Update the VKD3D version.
+   * Set the VKD3D version.
    */
   setVkd3dVersion(
-    version?: string,
+    version: string | undefined,
   ): void {
-    this.configuration.vkd3d.version =
+    this.graphics.vkd3d.version =
       version;
   }
 
   /**
-   * Return environment variables.
+   * Return all environment variables.
    */
   getEnvironmentVariables(): Record<
     string,
     string
   > {
     return {
-      ...this.configuration
+      ...this.graphics
         .environmentVariables,
     };
   }
@@ -118,11 +130,11 @@ export class MacGraphicsProfile {
    * Set an environment variable.
    */
   setEnvironmentVariable(
-    key: string,
+    name: string,
     value: string,
   ): void {
-    this.configuration.environmentVariables[
-      key
+    this.graphics.environmentVariables[
+      name
     ] = value;
   }
 
@@ -130,20 +142,20 @@ export class MacGraphicsProfile {
    * Remove an environment variable.
    */
   removeEnvironmentVariable(
-    key: string,
+    name: string,
   ): boolean {
     if (
       !Object.prototype.hasOwnProperty.call(
-        this.configuration
+        this.graphics
           .environmentVariables,
-        key,
+        name,
       )
     ) {
       return false;
     }
 
-    delete this.configuration
-      .environmentVariables[key];
+    delete this.graphics
+      .environmentVariables[name];
 
     return true;
   }
@@ -153,7 +165,7 @@ export class MacGraphicsProfile {
    */
   getCompatibilityFlags(): string[] {
     return [
-      ...this.configuration
+      ...this.graphics
         .compatibilityFlags,
     ];
   }
@@ -165,11 +177,11 @@ export class MacGraphicsProfile {
     flag: string,
   ): void {
     if (
-      !this.configuration
+      !this.graphics
         .compatibilityFlags
         .includes(flag)
     ) {
-      this.configuration
+      this.graphics
         .compatibilityFlags
         .push(flag);
     }
@@ -182,7 +194,7 @@ export class MacGraphicsProfile {
     flag: string,
   ): boolean {
     const index =
-      this.configuration
+      this.graphics
         .compatibilityFlags
         .indexOf(flag);
 
@@ -190,7 +202,7 @@ export class MacGraphicsProfile {
       return false;
     }
 
-    this.configuration
+    this.graphics
       .compatibilityFlags
       .splice(index, 1);
 
@@ -198,40 +210,38 @@ export class MacGraphicsProfile {
   }
 
   /**
-   * Update notes attached to the graphics profile.
+   * Replace the entire graphics configuration.
    */
-  setNotes(
-    notes?: string,
+  replace(
+    graphics: MacGameCompatibilityProfile["graphics"],
   ): void {
-    this.configuration.notes =
-      notes;
+    this.graphics =
+      this.clone(graphics);
   }
 
   /**
-   * Create a safe copy of the configuration.
+   * Create a safe copy of the graphics configuration.
    */
   private clone(
-    configuration: MacGraphicsConfiguration,
-  ): MacGraphicsConfiguration {
+    graphics: MacGameCompatibilityProfile["graphics"],
+  ): MacGameCompatibilityProfile["graphics"] {
     return {
-      ...configuration,
+      ...graphics,
 
       dxvk: {
-        ...configuration.dxvk,
+        ...graphics.dxvk,
       },
 
       vkd3d: {
-        ...configuration.vkd3d,
+        ...graphics.vkd3d,
       },
 
       environmentVariables: {
-        ...configuration
-          .environmentVariables,
+        ...graphics.environmentVariables,
       },
 
       compatibilityFlags: [
-        ...configuration
-          .compatibilityFlags,
+        ...graphics.compatibilityFlags,
       ],
     };
   }
