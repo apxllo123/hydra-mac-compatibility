@@ -1,124 +1,191 @@
 /**
  * Hydra Mac Compatibility
  *
- * Central configuration for the compatibility system.
+ * Defines the global configuration for the Windows
+ * Compatibility subsystem.
  *
- * This file defines configuration values and safe defaults.
- * It does not perform filesystem or Wine operations.
+ * This class manages configuration in memory.
+ * Filesystem persistence will be connected separately.
  */
 
-export interface MacCompatibilityConfigOptions {
+export interface MacCompatibilityGlobalConfig {
   /**
    * Root directory where compatibility data is stored.
    */
   rootPath: string;
 
   /**
-   * Whether automatic backups are enabled.
-   *
-   * Defaults to true.
+   * Whether automatic diagnostics are enabled.
    */
-  automaticBackups?: boolean;
+  automaticDiagnostics: boolean;
 
   /**
-   * Whether failed repair operations should automatically
-   * attempt restoration from the most recent backup.
-   *
-   * Defaults to true.
+   * Whether Hydra should automatically create backups
+   * before compatibility changes.
    */
-  automaticRestoreOnFailure?: boolean;
+  automaticBackups: boolean;
 
   /**
-   * Whether compatibility operations should write logs.
-   *
-   * Defaults to true.
+   * Whether compatibility operations should be logged.
    */
-  loggingEnabled?: boolean;
+  loggingEnabled: boolean;
 
   /**
-   * Maximum number of backups retained for each game.
-   *
-   * Defaults to 5.
+   * Maximum number of backups retained per game.
    */
-  maxBackupsPerGame?: number;
+  maxBackupsPerGame: number;
 }
 
+export const DEFAULT_MAC_COMPATIBILITY_CONFIG: MacCompatibilityGlobalConfig =
+  {
+    rootPath: "",
+    automaticDiagnostics: true,
+    automaticBackups: true,
+    loggingEnabled: true,
+    maxBackupsPerGame: 10,
+  };
+
 export class MacCompatibilityConfig {
-  readonly rootPath: string;
-  readonly automaticBackups: boolean;
-  readonly automaticRestoreOnFailure: boolean;
-  readonly loggingEnabled: boolean;
-  readonly maxBackupsPerGame: number;
+  private config: MacCompatibilityGlobalConfig;
 
   constructor(
-    options: MacCompatibilityConfigOptions,
+    initialConfig: Partial<MacCompatibilityGlobalConfig> = {},
   ) {
-    if (!options.rootPath.trim()) {
-      throw new Error(
-        "Compatibility root path cannot be empty.",
-      );
-    }
+    this.config = {
+      ...DEFAULT_MAC_COMPATIBILITY_CONFIG,
+      ...initialConfig,
+    };
+  }
 
+  /**
+   * Return the complete configuration.
+   */
+  get(): MacCompatibilityGlobalConfig {
+    return {
+      ...this.config,
+    };
+  }
+
+  /**
+   * Update one or more configuration values.
+   */
+  update(
+    changes: Partial<MacCompatibilityGlobalConfig>,
+  ): void {
+    this.config = {
+      ...this.config,
+      ...changes,
+    };
+  }
+
+  /**
+   * Return the configured compatibility root path.
+   */
+  getRootPath(): string {
+    return this.config.rootPath;
+  }
+
+  /**
+   * Change the compatibility root path.
+   */
+  setRootPath(
+    rootPath: string,
+  ): void {
+    this.config.rootPath =
+      rootPath;
+  }
+
+  /**
+   * Determine whether automatic diagnostics are enabled.
+   */
+  isAutomaticDiagnosticsEnabled(): boolean {
+    return (
+      this.config.automaticDiagnostics
+    );
+  }
+
+  /**
+   * Enable or disable automatic diagnostics.
+   */
+  setAutomaticDiagnostics(
+    enabled: boolean,
+  ): void {
+    this.config.automaticDiagnostics =
+      enabled;
+  }
+
+  /**
+   * Determine whether automatic backups are enabled.
+   */
+  isAutomaticBackupsEnabled(): boolean {
+    return (
+      this.config.automaticBackups
+    );
+  }
+
+  /**
+   * Enable or disable automatic backups.
+   */
+  setAutomaticBackups(
+    enabled: boolean,
+  ): void {
+    this.config.automaticBackups =
+      enabled;
+  }
+
+  /**
+   * Determine whether logging is enabled.
+   */
+  isLoggingEnabled(): boolean {
+    return (
+      this.config.loggingEnabled
+    );
+  }
+
+  /**
+   * Enable or disable logging.
+   */
+  setLoggingEnabled(
+    enabled: boolean,
+  ): void {
+    this.config.loggingEnabled =
+      enabled;
+  }
+
+  /**
+   * Return the maximum number of backups retained.
+   */
+  getMaxBackupsPerGame(): number {
+    return (
+      this.config.maxBackupsPerGame
+    );
+  }
+
+  /**
+   * Set the maximum number of backups retained.
+   */
+  setMaxBackupsPerGame(
+    count: number,
+  ): void {
     if (
-      options.maxBackupsPerGame !==
-        undefined &&
-      (!Number.isInteger(
-        options.maxBackupsPerGame,
-      ) ||
-        options.maxBackupsPerGame < 1)
+      !Number.isInteger(count) ||
+      count < 1
     ) {
       throw new Error(
         "maxBackupsPerGame must be a positive integer.",
       );
     }
 
-    this.rootPath =
-      options.rootPath;
-
-    this.automaticBackups =
-      options.automaticBackups ??
-      true;
-
-    this.automaticRestoreOnFailure =
-      options.automaticRestoreOnFailure ??
-      true;
-
-    this.loggingEnabled =
-      options.loggingEnabled ??
-      true;
-
-    this.maxBackupsPerGame =
-      options.maxBackupsPerGame ??
-      5;
+    this.config.maxBackupsPerGame =
+      count;
   }
 
   /**
-   * Create a configuration using safe defaults.
+   * Restore the default configuration.
    */
-  static createDefault(
-    rootPath: string,
-  ): MacCompatibilityConfig {
-    return new MacCompatibilityConfig(
-      {
-        rootPath,
-      },
-    );
-  }
-
-  /**
-   * Return a plain object suitable for persistence.
-   */
-  toJSON(): MacCompatibilityConfigOptions {
-    return {
-      rootPath: this.rootPath,
-      automaticBackups:
-        this.automaticBackups,
-      automaticRestoreOnFailure:
-        this.automaticRestoreOnFailure,
-      loggingEnabled:
-        this.loggingEnabled,
-      maxBackupsPerGame:
-        this.maxBackupsPerGame,
+  reset(): void {
+    this.config = {
+      ...DEFAULT_MAC_COMPATIBILITY_CONFIG,
     };
   }
 }
