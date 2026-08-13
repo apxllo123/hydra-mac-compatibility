@@ -1,63 +1,93 @@
 /**
  * Hydra Mac Compatibility
  *
- * Detects Windows dependencies used by a game's compatibility
- * environment.
+ * Detects Windows dependencies required by a game and
+ * determines which dependencies are already available.
  *
- * This class only detects and reports dependencies.
- * It does not install, remove, or modify anything.
+ * Detection is read-only.
+ * Installation is handled separately by
+ * MacDependencyInstaller.
  */
 
 import {
   MacDependency,
+  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
 export class MacDependencyDetector {
   /**
-   * Detect dependencies currently associated with a game.
+   * Detect dependencies currently recorded for a game.
    *
-   * Actual prefix inspection will be connected during
-   * Hydra integration.
+   * Real system-level dependency detection will be connected
+   * during macOS/Wine integration.
    */
   detect(
-    _gameId: string,
-    _prefixPath: string,
+    profile: MacGameCompatibilityProfile,
   ): MacDependency[] {
-    return [];
+    if (!profile.dependencies) {
+      return [];
+    }
+
+    return profile.dependencies.map(
+      (dependency) => ({
+        ...dependency,
+      }),
+    );
   }
 
   /**
-   * Check whether a specific dependency is installed.
+   * Determine whether a specific dependency is recorded
+   * as installed.
    */
   isInstalled(
-    gameId: string,
-    prefixPath: string,
-    dependencyId: string,
+    profile: MacGameCompatibilityProfile,
+    dependencyName: string,
   ): boolean {
-    return this.detect(
-      gameId,
-      prefixPath,
-    ).some(
+    return this.detect(profile).some(
       (dependency) =>
-        dependency.id === dependencyId &&
+        dependency.name
+          .trim()
+          .toLowerCase() ===
+        dependencyName
+          .trim()
+          .toLowerCase() &&
+        dependency.installed === true,
+    );
+  }
+
+  /**
+   * Return dependencies that are currently missing.
+   */
+  getMissing(
+    profile: MacGameCompatibilityProfile,
+  ): MacDependency[] {
+    return this.detect(profile).filter(
+      (dependency) =>
+        !dependency.installed,
+    );
+  }
+
+  /**
+   * Return dependencies that are installed.
+   */
+  getInstalled(
+    profile: MacGameCompatibilityProfile,
+  ): MacDependency[] {
+    return this.detect(profile).filter(
+      (dependency) =>
         dependency.installed,
     );
   }
 
   /**
-   * Find a dependency by its ID.
+   * Determine whether all recorded dependencies
+   * are currently available.
    */
-  findById(
-    gameId: string,
-    prefixPath: string,
-    dependencyId: string,
-  ): MacDependency | undefined {
-    return this.detect(
-      gameId,
-      prefixPath,
-    ).find(
-      (dependency) =>
-        dependency.id === dependencyId,
-    );
+  areAllInstalled(
+    profile: MacGameCompatibilityProfile,
+  ): boolean {
+    return this.getMissing(
+      profile,
+    ).length === 0;
   }
 }
