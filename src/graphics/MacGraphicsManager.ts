@@ -1,175 +1,159 @@
 /**
  * Hydra Mac Compatibility
  *
- * Manages per-game graphics compatibility settings.
+ * Central coordinator for per-game graphics compatibility.
  *
- * IMPORTANT:
- * This class manages configuration only.
- * It does not directly modify Wine prefixes or install
- * graphics components.
+ * The manager keeps graphics configuration isolated to the
+ * individual game and delegates configuration behavior to
+ * MacGraphicsProfile.
  */
 
-import type {
+import {
   MacGameCompatibilityProfile,
+  MacGraphicsConfiguration,
 } from "../manager/MacCompatibilityTypes";
 
-import type {
-  MacGraphicsProfile,
-} from "./MacGraphicsProfile";
+import { MacGraphicsProfile } from "./MacGraphicsProfile";
 
 export class MacGraphicsManager {
+  private readonly profiles = new Map<
+    string,
+    MacGraphicsProfile
+  >();
+
   /**
-   * Return the current graphics profile for a game.
+   * Create or replace the graphics profile for a game.
    */
-  getProfile(
-    profile: MacGameCompatibilityProfile,
+  register(
+    gameId: string,
+    configuration: MacGraphicsConfiguration,
   ): MacGraphicsProfile {
-    return {
-      ...profile.graphics,
-    };
+    const profile =
+      new MacGraphicsProfile(
+        configuration,
+      );
+
+    this.profiles.set(
+      gameId,
+      profile,
+    );
+
+    return profile;
   }
 
   /**
-   * Replace the game's graphics profile.
+   * Create a graphics profile from an existing game
+   * compatibility profile.
    */
-  setProfile(
-    profile: MacGameCompatibilityProfile,
-    graphics: MacGraphicsProfile,
-  ): void {
-    profile.graphics = {
-      ...graphics,
-    };
+  registerFromGameProfile(
+    gameProfile: MacGameCompatibilityProfile,
+  ): MacGraphicsProfile {
+    return this.register(
+      gameProfile.gameId,
+      gameProfile.graphics,
+    );
   }
 
   /**
-   * Enable or disable DXVK for a game.
+   * Get a game's graphics profile.
    */
-  setDXVKEnabled(
-    profile: MacGameCompatibilityProfile,
-    enabled: boolean,
-  ): void {
-    profile.graphics.dxvkEnabled =
-      enabled;
+  get(
+    gameId: string,
+  ): MacGraphicsProfile | undefined {
+    return this.profiles.get(gameId);
   }
 
   /**
-   * Enable or disable VKD3D for a game.
+   * Check whether graphics configuration exists.
    */
-  setVKD3DEnabled(
-    profile: MacGameCompatibilityProfile,
-    enabled: boolean,
-  ): void {
-    profile.graphics.vkd3dEnabled =
-      enabled;
+  has(
+    gameId: string,
+  ): boolean {
+    return this.profiles.has(
+      gameId,
+    );
   }
 
   /**
-   * Change the graphics backend.
-   */
-  setBackend(
-    profile: MacGameCompatibilityProfile,
-    backend: MacGraphicsProfile["backend"],
-  ): void {
-    profile.graphics.backend =
-      backend;
-  }
-
-  /**
-   * Reset graphics configuration to a safe baseline.
+   * Remove a game's graphics profile.
    *
-   * This only changes the stored profile.
-   * It does not delete or modify anything inside Wine.
+   * This only removes the in-memory graphics configuration.
+   * It does not delete files from disk.
    */
-  reset(
-    profile: MacGameCompatibilityProfile,
-  ): void {
-    profile.graphics = {
-      backend:
-        "auto",
-
-      dxvkEnabled:
-        false,
-
-      vkd3dEnabled:
-        false,
-    };
+  remove(
+    gameId: string,
+  ): boolean {
+    return this.profiles.delete(
+      gameId,
+    );
   }
 
   /**
-   * Determine whether the current configuration is
-   * internally consistent.
+   * Return all registered graphics profiles.
    */
-  validate(
-    profile: MacGameCompatibilityProfile,
-  ): string[] {
-    const problems: string[] = [];
-
-    if (
-      !profile.graphics
-    ) {
-      problems.push(
-        "No graphics profile is configured.",
-      );
-
-      return problems;
-    }
-
-    if (
-      profile.graphics.backend ===
-      undefined
-    ) {
-      problems.push(
-        "No graphics backend is configured.",
-      );
-    }
-
-    /*
-     * DXVK targets DirectX 9/10/11.
-     * VKD3D targets DirectX 12.
-     *
-     * Both can legitimately be installed for different
-     * games, so enabling both is not automatically an error.
-     */
-    if (
-      profile.graphics.dxvkEnabled &&
-      profile.graphics.vkd3dEnabled
-    ) {
-      problems.push(
-        "DXVK and VKD3D are both enabled. This can be valid, but the configuration should be tested with the game.",
-      );
-    }
-
-    return problems;
+  getAll(): Map<
+    string,
+    MacGraphicsProfile
+  > {
+    return new Map(
+      this.profiles,
+    );
   }
 
   /**
-   * Create a simple description of the current
-   * graphics configuration for logging/UI.
+   * Update a game's complete graphics configuration.
    */
-  describe(
-    profile: MacGameCompatibilityProfile,
-  ): string {
-    const graphics =
-      profile.graphics;
+  update(
+    gameId: string,
+    configuration: MacGraphicsConfiguration,
+  ): boolean {
+    const profile =
+      this.profiles.get(
+        gameId,
+      );
 
-    const backend =
-      graphics.backend ??
-      "unknown";
+    if (!profile) {
+      return false;
+    }
 
-    const dxvk =
-      graphics.dxvkEnabled
-        ? "enabled"
-        : "disabled";
+    profile.setConfiguration(
+      configuration,
+    );
 
-    const vkd3d =
-      graphics.vkd3dEnabled
-        ? "enabled"
-        : "disabled";
+    return true;
+  }
 
-    return [
-      `Backend: ${backend}`,
-      `DXVK: ${dxvk}`,
-      `VKD3D: ${vkd3d}`,
-    ].join("\n");
+  /**
+   * Validate a game's graphics configuration.
+   */
+  isValid(
+    gameId: string,
+  ): boolean {
+    const profile =
+      this.profiles.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    return profile.isValid();
+  }
+
+  /**
+   * Clear every registered graphics profile.
+   *
+   * This does not delete any configuration files.
+   */
+  clear(): void {
+    this.profiles.clear();
+  }
+
+  /**
+   * Return the number of registered graphics profiles.
+   */
+  count(): number {
+    return this.profiles.size;
   }
 }
