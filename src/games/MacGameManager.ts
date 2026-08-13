@@ -1,228 +1,149 @@
 /**
  * Hydra Mac Compatibility
  *
- * Manager responsible for creating, loading, and organizing
- * individual Windows game compatibility environments.
+ * Game-level coordinator for Windows games running through
+ * the Hydra Mac Compatibility system.
+ *
+ * MacGameManager is responsible for creating, registering,
+ * retrieving, updating, and removing game compatibility profiles.
+ *
+ * It does NOT directly manage Wine, dependencies, graphics,
+ * diagnostics, or repair logic.
+ *
+ * Those responsibilities belong to their respective systems.
  */
 
-import type {
-  GraphicsConfiguration,
+import {
+  CompatibilityStatus,
   MacGameCompatibilityProfile,
-  WineConfiguration,
 } from "../manager/MacCompatibilityTypes";
 
-import {
-  MacCompatibilityPaths,
-} from "../storage/MacCompatibilityPaths";
-
-import {
-  MacGameProfile,
-  MacGameProfileOptions,
-} from "./MacGameProfile";
-
-import {
-  MacGameProfileStore,
-} from "./MacGameProfileStore";
-
-export interface CreateGameOptions {
-  gameId: string;
-  gameName: string;
-
-  /**
-   * Wine configuration selected for this game.
-   */
-  wine: WineConfiguration;
-
-  /**
-   * Graphics configuration selected for this game.
-   */
-  graphics: GraphicsConfiguration;
-}
+import { MacGameProfile } from "./MacGameProfile";
+import { MacGameProfileStore } from "./MacGameProfileStore";
 
 export class MacGameManager {
-  private readonly paths: MacCompatibilityPaths;
-
   private readonly store: MacGameProfileStore;
 
   constructor(
-    paths: MacCompatibilityPaths,
+    store: MacGameProfileStore = new MacGameProfileStore(),
   ) {
-    this.paths = paths;
-    this.store = new MacGameProfileStore(
-      paths,
-    );
+    this.store = store;
   }
 
   /**
-   * Create a new game compatibility profile.
+   * Create a new compatibility profile for a Windows game.
    *
-   * This creates the game's compatibility directory,
-   * but does not create a Wine prefix yet.
+   * The profile starts in an unconfigured state and can
+   * be configured by the compatibility subsystems later.
    */
-  async createGame(
-    options: CreateGameOptions,
-  ): Promise<MacGameProfile> {
-    const existingProfile =
-      await this.store.load(
-        options.gameName,
-      );
-
-    if (existingProfile) {
-      throw new Error(
-        `A compatibility profile already exists for "${options.gameName}".`,
-      );
-    }
-
-    const gamePath =
-      this.paths.getGamePath(
-        options.gameName,
-      );
-
-    const profileOptions:
-      MacGameProfileOptions = {
-      gameId: options.gameId,
-      gameName: options.gameName,
-      gamePath,
-      wine: options.wine,
-      graphics: options.graphics,
-      schemaVersion: 1,
-    };
-
-    const profile =
-      new MacGameProfile(
-        profileOptions,
-      );
-
-    await this.saveGame(
-      profile,
-    );
-
-    return profile;
-  }
-
-  /**
-   * Load an existing game profile.
-   */
-  async loadGame(
+  createProfile(
+    gameId: string,
     gameName: string,
-  ): Promise<MacGameProfile | undefined> {
-    const profile =
-      await this.store.load(
-        gameName,
+    gamePath: string,
+  ): MacGameCompatibilityProfile {
+    if (this.store.exists(gameId)) {
+      throw new Error(
+        `A compatibility profile already exists for game "${gameId}".`,
       );
-
-    if (!profile) {
-      return undefined;
     }
 
-    const game =
-      new MacGameProfile(
-        {
-          gameId: profile.gameId,
-          gameName: profile.gameName,
-          gamePath: profile.gamePath,
-          wine: profile.wine,
-          graphics: profile.graphics,
-          schemaVersion:
-            profile.schemaVersion,
-        },
-      );
+    const profile = new MacGameProfile({
+      gameId,
+      gameName,
+      gamePath,
+    });
 
-    game.loadProfile(
-      profile,
-    );
+    const compatibilityProfile = profile.toProfile();
 
-    return game;
+    this.store.save(compatibilityProfile);
+
+    return compatibilityProfile;
   }
 
   /**
-   * Save a game profile.
+   * Retrieve a game's compatibility profile.
    */
-  async saveGame(
-    game: MacGameProfile,
-  ): Promise<void> {
-    await this.store.save(
-      game.getProfile(),
-    );
+  getProfile(
+    gameId: string,
+  ): MacGameCompatibilityProfile | undefined {
+    return this.store.load(gameId);
+  }
+
+  /**
+   * Retrieve a game profile as a MacGameProfile model.
+   */
+  getProfileModel(
+    gameId: string,
+  ): MacGameProfile | undefined {
+    return this.store.loadModel(gameId);
   }
 
   /**
    * Check whether a game has a compatibility profile.
    */
-  async gameExists(
-    gameName: string,
-  ): Promise<boolean> {
-    return this.store.exists(
-      gameName,
-    );
+  hasProfile(gameId: string): boolean {
+    return this.store.exists(gameId);
+  }
+
+  /**
+   * Return every registered game profile.
+   */
+  getAllProfiles(): MacGameCompatibilityProfile[] {
+    return this.store.getAll();
+  }
+
+  /**
+   * Return all profiles matching a compatibility status.
+   */
+  getProfilesByStatus(
+    status: CompatibilityStatus,
+  ): MacGameCompatibilityProfile[] {
+    return this.store
+      .getAll()
+      .filter((profile) => profile.status === status);
+  }
+
+  /**
+   * Update and save an existing profile.
+   */
+  updateProfile(
+    profile: MacGameCompatibilityProfile,
+  ): void {
+    if (!this.store.exists(profile.gameId)) {
+      throw new Error(
+        `Cannot update missing compatibility profile for game "${profile.gameId}".`,
+      );
+    }
+
+    this.store.save(profile);
   }
 
   /**
    * Remove a game's compatibility profile.
    *
-   * This does not delete the game's prefix,
-   * configuration, logs, backups, or other data.
+   * IMPORTANT:
+   * This only removes the profile from the profile store.
+   * It does NOT delete the game's files, Wine prefix,
+   * backups, logs, or compatibility directory.
    */
-  async removeGameProfile(
-    gameName: string,
-  ): Promise<boolean> {
-    return this.store.deleteProfile(
-      gameName,
-    );
+  removeProfile(gameId: string): boolean {
+    return this.store.delete(gameId);
   }
 
   /**
-   * List all games known to the compatibility system.
+   * Return the number of managed games.
    */
-  async listGames(): Promise<string[]> {
-    return this.store.listGameNames();
+  getGameCount(): number {
+    return this.store.count();
   }
 
   /**
-   * Update a game's Wine configuration.
+   * Clear all profiles from the store.
+   *
+   * This is intentionally limited to profile data.
+   * It does NOT delete files from disk.
    */
-  async updateWineConfiguration(
-    game: MacGameProfile,
-    wine: WineConfiguration,
-  ): Promise<void> {
-    game.setWineConfiguration(
-      wine,
-    );
-
-    await this.saveGame(
-      game,
-    );
-  }
-
-  /**
-   * Update a game's graphics configuration.
-   */
-  async updateGraphicsConfiguration(
-    game: MacGameProfile,
-    graphics: GraphicsConfiguration,
-  ): Promise<void> {
-    game.setGraphicsConfiguration(
-      graphics,
-    );
-
-    await this.saveGame(
-      game,
-    );
-  }
-
-  /**
-   * Update the game's compatibility status.
-   */
-  async updateStatus(
-    game: MacGameProfile,
-    status: MacGameCompatibilityProfile["status"],
-  ): Promise<void> {
-    game.setStatus(
-      status,
-    );
-
-    await this.saveGame(
-      game,
-    );
+  clearProfiles(): void {
+    this.store.clear();
   }
 }
