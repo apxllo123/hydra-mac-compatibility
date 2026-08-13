@@ -1,353 +1,159 @@
 /**
  * Hydra Mac Compatibility
  *
- * Backup and restore support for per-game compatibility
- * configurations.
+ * Backup coordination for Windows game compatibility environments.
  *
- * IMPORTANT:
- * This component is intentionally conservative.
- * It backs up compatibility configuration data and does
- * not automatically delete or overwrite game files.
+ * This class is responsible for tracking backup operations.
+ * Actual filesystem copying/restoration will be connected to the
+ * platform storage layer as the project is integrated into Hydra.
  */
 
 import {
-  promises as fs,
-} from "node:fs";
-
-import * as path from "node:path";
-
-import type {
-  MacGameCompatibilityProfile,
+  CompatibilityBackup,
 } from "../manager/MacCompatibilityTypes";
 
-export interface CompatibilityBackupMetadata {
-  id: string;
-
+export interface CompatibilityBackupRequest {
   gameId: string;
+  sourcePath: string;
+  description?: string;
+}
 
-  gameName: string;
-
-  createdAt: string;
-
-  reason: string;
-
-  profileFile: string;
+export interface CompatibilityRestoreResult {
+  success: boolean;
+  backupId: string;
+  restoredPath?: string;
+  error?: string;
 }
 
 export class MacCompatibilityBackups {
-  /**
-   * Create a backup of a game's compatibility profile.
-   */
-  async createBackup(
-    profile: MacGameCompatibilityProfile,
-    backupDirectory: string,
-    reason = "manual",
-  ): Promise<CompatibilityBackupMetadata> {
-    const backupId =
-      this.createBackupId();
-
-    const gameDirectory =
-      path.join(
-        backupDirectory,
-        this.sanitizeName(
-          profile.gameName,
-        ),
-      );
-
-    const destination =
-      path.join(
-        gameDirectory,
-        backupId,
-      );
-
-    await fs.mkdir(
-      destination,
-      {
-        recursive: true,
-      },
-    );
-
-    const profileFile =
-      path.join(
-        destination,
-        "compatibility.json",
-      );
-
-    await fs.writeFile(
-      profileFile,
-      JSON.stringify(
-        profile,
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    const metadata: CompatibilityBackupMetadata =
-      {
-        id: backupId,
-
-        gameId:
-          profile.gameId,
-
-        gameName:
-          profile.gameName,
-
-        createdAt:
-          new Date().toISOString(),
-
-        reason,
-
-        profileFile,
-      };
-
-    await fs.writeFile(
-      path.join(
-        destination,
-        "backup.json",
-      ),
-      JSON.stringify(
-        metadata,
-        null,
-        2,
-      ),
-      "utf8",
-    );
-
-    return metadata;
-  }
+  private readonly backups = new Map<
+    string,
+    CompatibilityBackup[]
+  >();
 
   /**
-   * Restore a compatibility profile from a backup.
+   * Register a backup for a game.
    *
-   * This returns the backed-up profile rather than
-   * automatically modifying the current profile.
+   * This currently records the backup metadata. The actual
+   * filesystem copy will be implemented by the storage layer.
    */
-  async restoreBackup(
-    profileFile: string,
-  ): Promise<MacGameCompatibilityProfile> {
-    const contents =
-      await fs.readFile(
-        profileFile,
-        "utf8",
-      );
-
-    const profile =
-      JSON.parse(
-        contents,
-      ) as MacGameCompatibilityProfile;
-
-    this.validateBackupProfile(
-      profile,
-    );
-
-    return profile;
-  }
-
-  /**
-   * List available backups for a specific game.
-   */
-  async listBackups(
-    backupDirectory: string,
-    gameName: string,
-  ): Promise<CompatibilityBackupMetadata[]> {
-    const gameDirectory =
-      path.join(
-        backupDirectory,
-        this.sanitizeName(
-          gameName,
-        ),
-      );
-
-    try {
-      const entries =
-        await fs.readdir(
-          gameDirectory,
-          {
-            withFileTypes: true,
-          },
-        );
-
-      const backups:
-        CompatibilityBackupMetadata[] =
-        [];
-
-      for (
-        const entry of entries
-      ) {
-        if (
-          !entry.isDirectory()
-        ) {
-          continue;
-        }
-
-        const metadataFile =
-          path.join(
-            gameDirectory,
-            entry.name,
-            "backup.json",
-          );
-
-        try {
-          const contents =
-            await fs.readFile(
-              metadataFile,
-              "utf8",
-            );
-
-          const metadata =
-            JSON.parse(
-              contents,
-            ) as CompatibilityBackupMetadata;
-
-          backups.push(
-            metadata,
-          );
-        } catch {
-          /*
-           * Ignore incomplete or corrupted backup
-           * metadata instead of failing the entire listing.
-           */
-        }
-      }
-
-      return backups.sort(
-        (
-          a,
-          b,
-        ) =>
-          b.createdAt.localeCompare(
-            a.createdAt,
-          ),
-      );
-    } catch {
-      return [];
-    }
-  }
-
-  /**
-   * Remove a single backup.
-   *
-   * This operation is explicit and never happens automatically.
-   */
-  async deleteBackup(
-    backupDirectory: string,
-    gameName: string,
-    backupId: string,
-  ): Promise<void> {
-    const backupPath =
-      path.join(
-        backupDirectory,
-        this.sanitizeName(
-          gameName,
-        ),
-        backupId,
-      );
-
-    await fs.rm(
-      backupPath,
-      {
-        recursive: true,
-        force: false,
-      },
-    );
-  }
-
-  /**
-   * Generate a unique backup identifier.
-   */
-  private createBackupId(): string {
-    const timestamp =
-      new Date()
-        .toISOString()
-        .replace(
-          /[:.]/g,
-          "-",
-        );
-
-    const random =
-      Math.random()
-        .toString(36)
-        .slice(
-          2,
-          8,
-        );
-
-    return `backup-${timestamp}-${random}`;
-  }
-
-  /**
-   * Make a game name safe to use as a directory name.
-   */
-  private sanitizeName(
-    name: string,
-  ): string {
-    const sanitized =
-      name
-        .trim()
-        .replace(
-          /[<>:"/\\|?*\u0000-\u001F]/g,
-          "_",
-        );
-
-    return (
-      sanitized ||
-      "Unknown Game"
-    );
-  }
-
-  /**
-   * Validate the basic structure of a restored profile.
-   */
-  private validateBackupProfile(
-    profile: MacGameCompatibilityProfile,
+  registerBackup(
+    gameId: string,
+    backup: CompatibilityBackup,
   ): void {
-    if (
-      !profile ||
-      typeof profile !==
-        "object"
-    ) {
-      throw new Error(
-        "Backup does not contain a valid compatibility profile.",
+    const gameBackups = this.backups.get(gameId) ?? [];
+
+    gameBackups.push(backup);
+
+    this.backups.set(gameId, gameBackups);
+  }
+
+  /**
+   * Return all backups belonging to a game.
+   */
+  getBackups(gameId: string): CompatibilityBackup[] {
+    return [
+      ...(this.backups.get(gameId) ?? []),
+    ];
+  }
+
+  /**
+   * Find a specific backup by ID.
+   */
+  getBackup(
+    gameId: string,
+    backupId: string,
+  ): CompatibilityBackup | undefined {
+    return this.backups
+      .get(gameId)
+      ?.find((backup) => backup.id === backupId);
+  }
+
+  /**
+   * Check whether a backup exists.
+   */
+  hasBackup(
+    gameId: string,
+    backupId: string,
+  ): boolean {
+    return Boolean(
+      this.getBackup(gameId, backupId),
+    );
+  }
+
+  /**
+   * Remove backup metadata from the in-memory registry.
+   *
+   * This does NOT delete the physical backup.
+   * Physical deletion belongs to the storage layer.
+   */
+  unregisterBackup(
+    gameId: string,
+    backupId: string,
+  ): boolean {
+    const gameBackups = this.backups.get(gameId);
+
+    if (!gameBackups) {
+      return false;
+    }
+
+    const originalLength = gameBackups.length;
+
+    const remainingBackups = gameBackups.filter(
+      (backup) => backup.id !== backupId,
+    );
+
+    if (remainingBackups.length === originalLength) {
+      return false;
+    }
+
+    if (remainingBackups.length === 0) {
+      this.backups.delete(gameId);
+    } else {
+      this.backups.set(
+        gameId,
+        remainingBackups,
       );
     }
 
-    if (
-      typeof profile.gameId !==
-      "string"
-    ) {
-      throw new Error(
-        "Backup compatibility profile is missing gameId.",
-      );
+    return true;
+  }
+
+  /**
+   * Remove all tracked backup metadata for a game.
+   *
+   * This does NOT delete physical backup files.
+   */
+  clearGameBackups(gameId: string): void {
+    this.backups.delete(gameId);
+  }
+
+  /**
+   * Remove all tracked backup metadata.
+   *
+   * This does NOT delete physical backup files.
+   */
+  clear(): void {
+    this.backups.clear();
+  }
+
+  /**
+   * Return the number of tracked backups for a game.
+   */
+  getBackupCount(gameId: string): number {
+    return this.backups.get(gameId)?.length ?? 0;
+  }
+
+  /**
+   * Return the total number of tracked backups.
+   */
+  getTotalBackupCount(): number {
+    let count = 0;
+
+    for (const gameBackups of this.backups.values()) {
+      count += gameBackups.length;
     }
 
-    if (
-      typeof profile.gameName !==
-      "string"
-    ) {
-      throw new Error(
-        "Backup compatibility profile is missing gameName.",
-      );
-    }
-
-    if (
-      !profile.wine ||
-      typeof profile.wine !==
-        "object"
-    ) {
-      throw new Error(
-        "Backup compatibility profile is missing Wine configuration.",
-      );
-    }
-
-    if (
-      !profile.graphics ||
-      typeof profile.graphics !==
-        "object"
-    ) {
-      throw new Error(
-        "Backup compatibility profile is missing graphics configuration.",
-      );
-    }
+    return count;
   }
 }
