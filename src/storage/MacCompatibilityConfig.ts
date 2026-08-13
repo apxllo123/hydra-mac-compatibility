@@ -1,191 +1,294 @@
 /**
  * Hydra Mac Compatibility
  *
- * Defines the global configuration for the Windows
- * Compatibility subsystem.
+ * Backup management for Windows game compatibility data.
  *
- * This class manages configuration in memory.
- * Filesystem persistence will be connected separately.
+ * This subsystem is intentionally conservative:
+ * backups are created before important changes and can be
+ * restored if a repair or configuration change fails.
  */
 
-export interface MacCompatibilityGlobalConfig {
-  /**
-   * Root directory where compatibility data is stored.
-   */
-  rootPath: string;
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
 
-  /**
-   * Whether automatic diagnostics are enabled.
-   */
-  automaticDiagnostics: boolean;
+import {
+  MacGameCompatibilityProfile,
+} from "../manager/MacCompatibilityTypes";
 
-  /**
-   * Whether Hydra should automatically create backups
-   * before compatibility changes.
-   */
-  automaticBackups: boolean;
+import { MacCompatibilityPaths } from "./MacCompatibilityPaths";
 
-  /**
-   * Whether compatibility operations should be logged.
-   */
-  loggingEnabled: boolean;
-
-  /**
-   * Maximum number of backups retained per game.
-   */
-  maxBackupsPerGame: number;
+export interface MacCompatibilityBackup {
+  id: string;
+  gameId: string;
+  createdAt: string;
+  path: string;
 }
 
-export const DEFAULT_MAC_COMPATIBILITY_CONFIG: MacCompatibilityGlobalConfig =
-  {
-    rootPath: "",
-    automaticDiagnostics: true,
-    automaticBackups: true,
-    loggingEnabled: true,
-    maxBackupsPerGame: 10,
-  };
-
-export class MacCompatibilityConfig {
-  private config: MacCompatibilityGlobalConfig;
+export class MacCompatibilityBackups {
+  private readonly paths: MacCompatibilityPaths;
 
   constructor(
-    initialConfig: Partial<MacCompatibilityGlobalConfig> = {},
+    paths: MacCompatibilityPaths,
   ) {
-    this.config = {
-      ...DEFAULT_MAC_COMPATIBILITY_CONFIG,
-      ...initialConfig,
-    };
+    this.paths = paths;
   }
 
   /**
-   * Return the complete configuration.
+   * Create a backup of a game's compatibility profile.
+   *
+   * The original profile is never modified.
    */
-  get(): MacCompatibilityGlobalConfig {
+  async createProfileBackup(
+    profile: MacGameCompatibilityProfile,
+  ): Promise<MacCompatibilityBackup> {
+    const gameId = profile.gameId;
+    const createdAt =
+      new Date().toISOString();
+
+    const id =
+      this.createBackupId(
+        createdAt,
+      );
+
+    const backupDirectory =
+      path.join(
+        this.paths.getBackupsPath(
+          gameId,
+        ),
+        id,
+      );
+
+    await fs.mkdir(
+      backupDirectory,
+      {
+        recursive: true,
+      },
+    );
+
+    const backupPath =
+      path.join(
+        backupDirectory,
+        "compatibility.json",
+      );
+
+    await fs.writeFile(
+      backupPath,
+      JSON.stringify(
+        profile,
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
     return {
-      ...this.config,
+      id,
+      gameId,
+      createdAt,
+      path: backupPath,
     };
   }
 
   /**
-   * Update one or more configuration values.
+   * Restore a compatibility profile from a backup.
+   *
+   * The returned profile can then be handed back to the
+   * profile store or manager.
    */
-  update(
-    changes: Partial<MacCompatibilityGlobalConfig>,
-  ): void {
-    this.config = {
-      ...this.config,
-      ...changes,
-    };
-  }
+  async restoreProfileBackup(
+    backup: MacCompatibilityBackup,
+  ): Promise<MacGameCompatibilityProfile> {
+    const raw =
+      await fs.readFile(
+        backup.path,
+        "utf8",
+      );
 
-  /**
-   * Return the configured compatibility root path.
-   */
-  getRootPath(): string {
-    return this.config.rootPath;
-  }
+    const profile =
+      JSON.parse(
+        raw,
+      ) as MacGameCompatibilityProfile;
 
-  /**
-   * Change the compatibility root path.
-   */
-  setRootPath(
-    rootPath: string,
-  ): void {
-    this.config.rootPath =
-      rootPath;
-  }
-
-  /**
-   * Determine whether automatic diagnostics are enabled.
-   */
-  isAutomaticDiagnosticsEnabled(): boolean {
-    return (
-      this.config.automaticDiagnostics
-    );
-  }
-
-  /**
-   * Enable or disable automatic diagnostics.
-   */
-  setAutomaticDiagnostics(
-    enabled: boolean,
-  ): void {
-    this.config.automaticDiagnostics =
-      enabled;
-  }
-
-  /**
-   * Determine whether automatic backups are enabled.
-   */
-  isAutomaticBackupsEnabled(): boolean {
-    return (
-      this.config.automaticBackups
-    );
-  }
-
-  /**
-   * Enable or disable automatic backups.
-   */
-  setAutomaticBackups(
-    enabled: boolean,
-  ): void {
-    this.config.automaticBackups =
-      enabled;
-  }
-
-  /**
-   * Determine whether logging is enabled.
-   */
-  isLoggingEnabled(): boolean {
-    return (
-      this.config.loggingEnabled
-    );
-  }
-
-  /**
-   * Enable or disable logging.
-   */
-  setLoggingEnabled(
-    enabled: boolean,
-  ): void {
-    this.config.loggingEnabled =
-      enabled;
-  }
-
-  /**
-   * Return the maximum number of backups retained.
-   */
-  getMaxBackupsPerGame(): number {
-    return (
-      this.config.maxBackupsPerGame
-    );
-  }
-
-  /**
-   * Set the maximum number of backups retained.
-   */
-  setMaxBackupsPerGame(
-    count: number,
-  ): void {
     if (
-      !Number.isInteger(count) ||
-      count < 1
+      profile.gameId !==
+      backup.gameId
     ) {
       throw new Error(
-        "maxBackupsPerGame must be a positive integer.",
+        "Backup game ID does not match the requested game.",
       );
     }
 
-    this.config.maxBackupsPerGame =
-      count;
+    return profile;
   }
 
   /**
-   * Restore the default configuration.
+   * List available backups for a game.
    */
-  reset(): void {
-    this.config = {
-      ...DEFAULT_MAC_COMPATIBILITY_CONFIG,
-    };
+  async listBackups(
+    gameId: string,
+  ): Promise<MacCompatibilityBackup[]> {
+    const backupsPath =
+      this.paths.getBackupsPath(
+        gameId,
+      );
+
+    try {
+      const entries =
+        await fs.readdir(
+          backupsPath,
+          {
+            withFileTypes: true,
+          },
+        );
+
+      const backups: MacCompatibilityBackup[] =
+        [];
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue;
+        }
+
+        const backupPath =
+          path.join(
+            backupsPath,
+            entry.name,
+            "compatibility.json",
+          );
+
+        try {
+          const raw =
+            await fs.readFile(
+              backupPath,
+              "utf8",
+            );
+
+          const profile =
+            JSON.parse(
+              raw,
+            ) as MacGameCompatibilityProfile;
+
+          if (
+            profile.gameId !==
+            gameId
+          ) {
+            continue;
+          }
+
+          const stats =
+            await fs.stat(
+              backupPath,
+            );
+
+          backups.push({
+            id: entry.name,
+            gameId,
+            createdAt:
+              stats.mtime.toISOString(),
+            path: backupPath,
+          });
+        } catch {
+          // Ignore incomplete or corrupt backup entries.
+        }
+      }
+
+      return backups.sort(
+        (a, b) =>
+          b.createdAt.localeCompare(
+            a.createdAt,
+          ),
+      );
+    } catch (error) {
+      const code =
+        (
+          error as NodeJS.ErrnoException
+        ).code;
+
+      if (code === "ENOENT") {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  /**
+   * Delete one specific backup.
+   *
+   * This is intentionally explicit. Backups are never
+   * automatically deleted by this class.
+   */
+  async deleteBackup(
+    backup: MacCompatibilityBackup,
+  ): Promise<void> {
+    const backupDirectory =
+      path.dirname(
+        backup.path,
+      );
+
+    await fs.rm(
+      backupDirectory,
+      {
+        recursive: true,
+        force: true,
+      },
+    );
+  }
+
+  /**
+   * Remove old backups while keeping the newest
+   * requested number.
+   *
+   * This method should only be called by explicit
+   * maintenance operations.
+   */
+  async pruneBackups(
+    gameId: string,
+    keep: number,
+  ): Promise<MacCompatibilityBackup[]> {
+    if (
+      !Number.isInteger(keep) ||
+      keep < 1
+    ) {
+      throw new Error(
+        "Backup retention count must be a positive integer.",
+      );
+    }
+
+    const backups =
+      await this.listBackups(
+        gameId,
+      );
+
+    const toDelete =
+      backups.slice(keep);
+
+    for (const backup of toDelete) {
+      await this.deleteBackup(
+        backup,
+      );
+    }
+
+    return backups.slice(
+      0,
+      keep,
+    );
+  }
+
+  /**
+   * Create a filesystem-safe backup ID.
+   */
+  private createBackupId(
+    timestamp: string,
+  ): string {
+    return timestamp
+      .replace(
+        /[:.]/g,
+        "-",
+      )
+      .replace(
+        /Z$/,
+        "",
+      );
   }
 }
