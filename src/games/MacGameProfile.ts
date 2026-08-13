@@ -1,179 +1,415 @@
 /**
  * Hydra Mac Compatibility
  *
- * Represents a single Windows game and its compatibility
- * environment on macOS.
+ * Game compatibility profile model.
+ *
+ * A profile represents everything Hydra needs to remember about
+ * one Windows game running through the macOS compatibility system.
  */
 
-import type {
+import {
+  CompatibilityBackup,
+  CompatibilityStatus,
+  GameDependency,
   GraphicsConfiguration,
-  MacGameCompatibilityProfile,
+  KnownGoodConfiguration,
   WineConfiguration,
 } from "../manager/MacCompatibilityTypes";
 
-export interface MacGameProfileOptions {
-  gameId: string;
-  gameName: string;
-  gamePath: string;
-  wine: WineConfiguration;
-  graphics: GraphicsConfiguration;
-  schemaVersion?: number;
-}
-
-/**
- * Represents one Windows game managed by Hydra's
- * Mac Compatibility system.
- */
 export class MacGameProfile {
-  private profile: MacGameCompatibilityProfile;
+  private profile: {
+    gameId: string;
+    gameName: string;
+    gamePath: string;
+    compatibilityPath: string;
+    status: CompatibilityStatus;
+    wine: WineConfiguration;
+    graphics: GraphicsConfiguration;
+    dependencies: GameDependency[];
+    lastTested?: string;
+    lastDiagnosed?: string;
+    lastRepaired?: string;
+    lastUpdated?: string;
+    lastKnownGoodConfiguration?: KnownGoodConfiguration;
+    backups: CompatibilityBackup[];
+    notes?: string;
+  };
 
-  constructor(options: MacGameProfileOptions) {
+  constructor(
+    initialProfile: {
+      gameId: string;
+      gameName: string;
+      gamePath: string;
+      compatibilityPath: string;
+      status?: CompatibilityStatus;
+      wine: WineConfiguration;
+      graphics: GraphicsConfiguration;
+      dependencies?: GameDependency[];
+      lastTested?: string;
+      lastDiagnosed?: string;
+      lastRepaired?: string;
+      lastUpdated?: string;
+      lastKnownGoodConfiguration?: KnownGoodConfiguration;
+      backups?: CompatibilityBackup[];
+      notes?: string;
+    },
+  ) {
+    if (!initialProfile.gameId.trim()) {
+      throw new Error("Game ID cannot be empty.");
+    }
+
+    if (!initialProfile.gameName.trim()) {
+      throw new Error("Game name cannot be empty.");
+    }
+
+    if (!initialProfile.gamePath.trim()) {
+      throw new Error("Game path cannot be empty.");
+    }
+
+    if (!initialProfile.compatibilityPath.trim()) {
+      throw new Error(
+        "Compatibility path cannot be empty.",
+      );
+    }
+
     this.profile = {
-      gameId: options.gameId,
-      gameName: options.gameName,
-      gamePath: options.gamePath,
-
-      wine: options.wine,
-      graphics: options.graphics,
-
-      installedDependencies: [],
-
-      status: "unknown",
-
-      schemaVersion: options.schemaVersion ?? 1,
+      gameId: initialProfile.gameId,
+      gameName: initialProfile.gameName,
+      gamePath: initialProfile.gamePath,
+      compatibilityPath:
+        initialProfile.compatibilityPath,
+      status: initialProfile.status ?? "unknown",
+      wine: initialProfile.wine,
+      graphics: initialProfile.graphics,
+      dependencies:
+        initialProfile.dependencies ?? [],
+      lastTested: initialProfile.lastTested,
+      lastDiagnosed:
+        initialProfile.lastDiagnosed,
+      lastRepaired:
+        initialProfile.lastRepaired,
+      lastUpdated:
+        initialProfile.lastUpdated,
+      lastKnownGoodConfiguration:
+        initialProfile.lastKnownGoodConfiguration,
+      backups:
+        initialProfile.backups ?? [],
+      notes: initialProfile.notes,
     };
   }
 
   /**
    * Return the complete compatibility profile.
    */
-  getProfile(): MacGameCompatibilityProfile {
+  toProfile(): {
+    gameId: string;
+    gameName: string;
+    gamePath: string;
+    compatibilityPath: string;
+    status: CompatibilityStatus;
+    wine: WineConfiguration;
+    graphics: GraphicsConfiguration;
+    dependencies: GameDependency[];
+    lastTested?: string;
+    lastDiagnosed?: string;
+    lastRepaired?: string;
+    lastUpdated?: string;
+    lastKnownGoodConfiguration?: KnownGoodConfiguration;
+    backups: CompatibilityBackup[];
+    notes?: string;
+  } {
     return {
       ...this.profile,
-      wine: {
-        ...this.profile.wine,
-        environment: this.profile.wine.environment
-          ? { ...this.profile.wine.environment }
-          : undefined,
-      },
-      graphics: {
-        ...this.profile.graphics,
-        environment: this.profile.graphics.environment
-          ? { ...this.profile.graphics.environment }
-          : undefined,
-      },
-      installedDependencies: [
-        ...this.profile.installedDependencies,
+      dependencies: [
+        ...this.profile.dependencies,
+      ],
+      backups: [
+        ...this.profile.backups,
       ],
     };
   }
 
   /**
-   * Return the game's stable ID.
+   * Return the stable game ID.
    */
   getGameId(): string {
     return this.profile.gameId;
   }
 
   /**
-   * Return the game's display name.
+   * Return the human-readable game name.
    */
   getGameName(): string {
     return this.profile.gameName;
   }
 
   /**
-   * Return the game's compatibility directory.
+   * Return the installed game path.
    */
   getGamePath(): string {
     return this.profile.gamePath;
   }
 
   /**
-   * Return the current Wine configuration.
+   * Return the compatibility data directory.
    */
-  getWineConfiguration(): WineConfiguration {
-    return {
-      ...this.profile.wine,
-      environment: this.profile.wine.environment
-        ? { ...this.profile.wine.environment }
-        : undefined,
-    };
-  }
-
-  /**
-   * Return the current graphics configuration.
-   */
-  getGraphicsConfiguration(): GraphicsConfiguration {
-    return {
-      ...this.profile.graphics,
-      environment: this.profile.graphics.environment
-        ? { ...this.profile.graphics.environment }
-        : undefined,
-    };
-  }
-
-  /**
-   * Change the Wine configuration.
-   */
-  setWineConfiguration(
-    wine: WineConfiguration,
-  ): void {
-    this.profile.wine = wine;
-  }
-
-  /**
-   * Change the graphics configuration.
-   */
-  setGraphicsConfiguration(
-    graphics: GraphicsConfiguration,
-  ): void {
-    this.profile.graphics = graphics;
-  }
-
-  /**
-   * Update the compatibility status.
-   */
-  setStatus(
-    status: MacGameCompatibilityProfile["status"],
-  ): void {
-    this.profile.status = status;
+  getCompatibilityPath(): string {
+    return this.profile.compatibilityPath;
   }
 
   /**
    * Return the current compatibility status.
    */
-  getStatus(): MacGameCompatibilityProfile["status"] {
+  getStatus(): CompatibilityStatus {
     return this.profile.status;
   }
 
   /**
-   * Update the last-tested timestamp.
+   * Update the compatibility status.
    */
-  setLastTested(timestamp: string): void {
-    this.profile.lastTested = timestamp;
+  setStatus(status: CompatibilityStatus): void {
+    this.profile.status = status;
+    this.touch();
   }
 
   /**
-   * Return the last-tested timestamp.
+   * Return the Wine configuration.
    */
-  getLastTested(): string | undefined {
-    return this.profile.lastTested;
+  getWineConfiguration(): WineConfiguration {
+    return {
+      ...this.profile.wine,
+    };
   }
 
   /**
-   * Replace the complete profile.
-   *
-   * Useful when loading a profile from persistent storage.
+   * Replace the Wine configuration.
    */
-  loadProfile(
-    profile: MacGameCompatibilityProfile,
+  setWineConfiguration(
+    wine: WineConfiguration,
   ): void {
-    this.profile = {
-      ...profile,
-      installedDependencies: [
-        ...profile.installedDependencies,
+    this.profile.wine = {
+      ...wine,
+    };
+
+    this.touch();
+  }
+
+  /**
+   * Return the graphics configuration.
+   */
+  getGraphicsConfiguration(): GraphicsConfiguration {
+    return {
+      ...this.profile.graphics,
+      environmentVariables: {
+        ...this.profile.graphics
+          .environmentVariables,
+      },
+      compatibilityFlags: [
+        ...this.profile.graphics
+          .compatibilityFlags,
       ],
     };
+  }
+
+  /**
+   * Replace the graphics configuration.
+   */
+  setGraphicsConfiguration(
+    graphics: GraphicsConfiguration,
+  ): void {
+    this.profile.graphics = {
+      ...graphics,
+      environmentVariables: {
+        ...graphics.environmentVariables,
+      },
+      compatibilityFlags: [
+        ...graphics.compatibilityFlags,
+      ],
+    };
+
+    this.touch();
+  }
+
+  /**
+   * Return all dependencies.
+   */
+  getDependencies(): GameDependency[] {
+    return this.profile.dependencies.map(
+      (dependency) => ({
+        ...dependency,
+      }),
+    );
+  }
+
+  /**
+   * Add a dependency.
+   *
+   * Existing dependencies with the same ID are replaced.
+   */
+  setDependency(
+    dependency: GameDependency,
+  ): void {
+    const existingIndex =
+      this.profile.dependencies.findIndex(
+        (item) => item.id === dependency.id,
+      );
+
+    if (existingIndex === -1) {
+      this.profile.dependencies.push({
+        ...dependency,
+      });
+    } else {
+      this.profile.dependencies[
+        existingIndex
+      ] = {
+        ...dependency,
+      };
+    }
+
+    this.touch();
+  }
+
+  /**
+   * Remove a dependency.
+   */
+  removeDependency(
+    dependencyId: string,
+  ): boolean {
+    const originalLength =
+      this.profile.dependencies.length;
+
+    this.profile.dependencies =
+      this.profile.dependencies.filter(
+        (dependency) =>
+          dependency.id !== dependencyId,
+      );
+
+    const removed =
+      this.profile.dependencies.length !==
+      originalLength;
+
+    if (removed) {
+      this.touch();
+    }
+
+    return removed;
+  }
+
+  /**
+   * Record a successful compatibility configuration.
+   */
+  setKnownGoodConfiguration(
+    configuration: KnownGoodConfiguration,
+  ): void {
+    this.profile.lastKnownGoodConfiguration = {
+      ...configuration,
+      dependencies:
+        configuration.dependencies.map(
+          (dependency) => ({
+            ...dependency,
+          }),
+        ),
+    };
+
+    this.touch();
+  }
+
+  /**
+   * Return the last known-good configuration.
+   */
+  getKnownGoodConfiguration():
+    | KnownGoodConfiguration
+    | undefined {
+    if (
+      !this.profile
+        .lastKnownGoodConfiguration
+    ) {
+      return undefined;
+    }
+
+    return {
+      ...this.profile
+        .lastKnownGoodConfiguration,
+      dependencies:
+        this.profile
+          .lastKnownGoodConfiguration
+          .dependencies.map(
+            (dependency) => ({
+              ...dependency,
+            }),
+          ),
+    };
+  }
+
+  /**
+   * Add a backup to the profile.
+   */
+  addBackup(
+    backup: CompatibilityBackup,
+  ): void {
+    this.profile.backups.push({
+      ...backup,
+    });
+
+    this.touch();
+  }
+
+  /**
+   * Return all backups.
+   */
+  getBackups(): CompatibilityBackup[] {
+    return this.profile.backups.map(
+      (backup) => ({
+        ...backup,
+      }),
+    );
+  }
+
+  /**
+   * Record the time of the latest compatibility test.
+   */
+  recordTestedAt(timestamp: string): void {
+    this.profile.lastTested = timestamp;
+    this.touch(timestamp);
+  }
+
+  /**
+   * Record the time of the latest diagnostic.
+   */
+  recordDiagnosedAt(timestamp: string): void {
+    this.profile.lastDiagnosed = timestamp;
+    this.touch(timestamp);
+  }
+
+  /**
+   * Record the time of the latest repair.
+   */
+  recordRepairedAt(timestamp: string): void {
+    this.profile.lastRepaired = timestamp;
+    this.touch(timestamp);
+  }
+
+  /**
+   * Update profile notes.
+   */
+  setNotes(notes?: string): void {
+    this.profile.notes = notes;
+    this.touch();
+  }
+
+  /**
+   * Return the current profile notes.
+   */
+  getNotes(): string | undefined {
+    return this.profile.notes;
+  }
+
+  /**
+   * Update the modification timestamp.
+   */
+  private touch(
+    timestamp: string = new Date().toISOString(),
+  ): void {
+    this.profile.lastUpdated = timestamp;
   }
 }
