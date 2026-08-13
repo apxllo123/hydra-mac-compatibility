@@ -14,48 +14,71 @@ Hydra Mac Compatibility is a dedicated compatibility system designed to allow Wi
 
                     HYDRA
                       │
-              Windows Compatibility
+                      ▼
+            Windows Compatibility
                       │
-        ┌─────────────┴─────────────┐
-        │                           │
-      Manager                    Game Profile
-        │                           │
-   ┌────┼────┬────┐                │
-   │    │    │    │                │
- Wine Games Deps Graphics           │
-   │    │    │    │                │
-   └────┴────┴────┴──────┐          │
-                         │          │
-                   Diagnostics      │
-                         │          │
-                      Repair        │
-                         │          │
-                       Tester       │
-                         │          │
-                    ┌────┴────┐     │
-                    │         │     │
-                  Logger    Errors   │
-                    │         │     │
-                    └────┬────┴─────┘
-                         │
-                       Storage
-                         │
-              ┌──────────┼──────────┐
-              │          │          │
-           Profiles   Backups   Configuration
-              │          │          │
-              └──────────┼──────────┘
-                         │
-                     Maintenance
-                         │
-          ┌──────────────┼──────────────┐
-          │              │              │
-       Backups       Migrations      Cleanup
-          │              │              │
-          └──────────────┼──────────────┘
-                         │
-                       Repair
-
+                      ▼
+        ┌─────────────────────────────┐
+        │   MacCompatibilityManager  │
+        └──────────────┬──────────────┘
+                       │
+       ┌───────────────┼────────────────┐
+       │               │                │
+       ▼               ▼                ▼
+     Wine            Games         Dependencies
+       │               │                │
+       │               ▼                │
+       │        ┌──────────────┐        │
+       │        │ Game Profile │        │
+       │        └──────┬───────┘        │
+       │               │                │
+       └───────────────┼────────────────┘
+                       │
+                       ▼
+                  ┌─────────┐
+                  │Graphics │
+                  └────┬────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │   Diagnostics   │
+              └────────┬────────┘
+                       │
+                       ▼
+                  ┌─────────┐
+                  │ Repair  │
+                  └────┬────┘
+                       │
+                       ▼
+                  ┌─────────┐
+                  │ Tester  │
+                  └────┬────┘
+                       │
+              ┌────────┴────────┐
+              ▼                 ▼
+           Logger             Errors
+              │                 │
+              └────────┬────────┘
+                       │
+                       ▼
+                 ┌───────────┐
+                 │  Storage  │
+                 └─────┬─────┘
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+       Profiles      Backups   Configuration
+                       │
+                       ▼
+                 Maintenance
+                       │
+          ┌────────────┼────────────┐
+          ▼            ▼            ▼
+       Backups     Migrations    Cleanup
+          │            │            │
+          └────────────┼────────────┘
+                       ▼
+                     Repair
 ---
 
 # Project Structure
