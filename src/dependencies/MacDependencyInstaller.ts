@@ -1,80 +1,136 @@
 /**
  * Hydra Mac Compatibility
  *
- * Installs Windows dependencies required by a game's
- * compatibility environment.
+ * Installs Windows dependencies required by a game.
  *
  * IMPORTANT:
- * This class is intentionally conservative.
+ * Installation is intentionally isolated from detection.
+ * The installer must never blindly install every available
+ * dependency.
  *
- * It does not blindly install dependencies.
- * The dependency manager and detector decide what is
- * appropriate before installation is requested.
+ * Actual Wine/winetricks installation will be connected
+ * during macOS integration.
  */
 
 import {
   MacDependency,
+  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
 export class MacDependencyInstaller {
   /**
-   * Install a dependency into a game's Wine prefix.
+   * Install a dependency for a game.
    *
-   * Actual installation commands will be connected during
-   * Hydra integration.
-   *
-   * Returning false for now is intentional. We should never
-   * pretend an installation succeeded when no real installer
-   * has been connected.
+   * The current implementation performs a safe profile-level
+   * operation only. Real dependency installation will be
+   * connected once the Wine environment is available.
    */
   install(
-    _gameId: string,
-    _prefixPath: string,
-    _dependency: MacDependency,
+    profile: MacGameCompatibilityProfile,
+    dependencyName: string,
   ): boolean {
-    return false;
-  }
-
-  /**
-   * Install multiple dependencies.
-   *
-   * Each dependency is processed independently.
-   */
-  installAll(
-    gameId: string,
-    prefixPath: string,
-    dependencies: MacDependency[],
-  ): MacDependency[] {
-    const installed: MacDependency[] = [];
-
-    for (const dependency of dependencies) {
-      const success = this.install(
-        gameId,
-        prefixPath,
-        dependency,
+    const dependency =
+      this.findDependency(
+        profile,
+        dependencyName,
       );
 
-      if (success) {
-        installed.push({
-          ...dependency,
-          installed: true,
-        });
-      }
+    if (!dependency) {
+      return false;
     }
 
-    return installed;
+    /*
+     * Do not claim that a dependency was installed until
+     * the real Wine dependency installer is connected.
+     */
+    return dependency.installed === true;
   }
 
   /**
-   * Determine whether a dependency is eligible for
-   * installation.
+   * Mark a dependency as installed after a real installation
+   * has successfully completed.
    *
-   * Unsupported dependencies should never be passed
-   * to the actual installation layer.
+   * This method is intentionally separate from install()
+   * so the profile cannot falsely report a successful
+   * installation.
+   */
+  recordInstalled(
+    profile: MacGameCompatibilityProfile,
+    dependencyName: string,
+  ): boolean {
+    const dependency =
+      this.findDependency(
+        profile,
+        dependencyName,
+      );
+
+    if (!dependency) {
+      return false;
+    }
+
+    dependency.installed = true;
+
+    return true;
+  }
+
+  /**
+   * Find a dependency by name.
+   */
+  findDependency(
+    profile: MacGameCompatibilityProfile,
+    dependencyName: string,
+  ): MacDependency | undefined {
+    return profile.dependencies?.find(
+      (dependency) =>
+        dependency.name
+          .trim()
+          .toLowerCase() ===
+        dependencyName
+          .trim()
+          .toLowerCase(),
+    );
+  }
+
+  /**
+   * Determine whether a dependency can be installed
+   * according to the current profile information.
+   *
+   * This is intentionally conservative.
    */
   canInstall(
-    dependency: MacDependency,
+    profile: MacGameCompatibilityProfile,
+    dependencyName: string,
   ): boolean {
-    return dependency.supported === true;
+    const dependency =
+      this.findDependency(
+        profile,
+        dependencyName,
+      );
+
+    if (!dependency) {
+      return false;
+    }
+
+    if (dependency.installed) {
+      return false;
+    }
+
+    /*
+     * Actual compatibility checks will be expanded when
+     * the Wine/dependency subsystem is integrated.
+     */
+    return true;
+  }
+
+  /**
+   * Return all dependencies that still need installation.
+   */
+  getInstallableDependencies(
+    profile: MacGameCompatibilityProfile,
+  ): MacDependency[] {
+    return (profile.dependencies ?? []).filter(
+      (dependency) =>
+        !dependency.installed,
+    );
   }
 }
