@@ -1,15 +1,18 @@
 /**
  * Hydra Mac Compatibility
  *
- * Centralized path definitions for Windows game compatibility data.
+ * Defines the filesystem layout used by Windows Compatibility.
  *
- * This file only defines and builds paths.
+ * This class only calculates paths.
  * It does not create, delete, or modify files.
  */
 
-import path from "node:path";
+import * as path from "node:path";
 
 export class MacCompatibilityPaths {
+  /**
+   * Root directory for Hydra Mac Compatibility data.
+   */
   private readonly rootPath: string;
 
   constructor(rootPath: string) {
@@ -19,14 +22,14 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Root directory for the compatibility system.
+   * Return the compatibility root directory.
    */
   getRootPath(): string {
     return this.rootPath;
   }
 
   /**
-   * Directory containing all game compatibility data.
+   * Return the directory containing all game profiles.
    */
   getGamesPath(): string {
     return path.join(
@@ -36,138 +39,128 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Directory for one game's compatibility data.
+   * Return a game's compatibility directory.
    */
   getGamePath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
       this.getGamesPath(),
-      this.sanitizeGameName(
-        gameName,
-      ),
+      this.sanitizeGameId(gameId),
     );
   }
 
   /**
-   * Wine prefix for a game.
+   * Return a game's Wine prefix directory.
    */
   getPrefixPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "prefix",
     );
   }
 
   /**
-   * Configuration directory for a game.
+   * Return a game's configuration directory.
    */
   getConfigPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "config",
     );
   }
 
   /**
-   * Dependency data directory for a game.
+   * Return a game's dependency directory.
    */
   getDependenciesPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "dependencies",
     );
   }
 
   /**
-   * Graphics configuration directory for a game.
+   * Return a game's graphics directory.
    */
   getGraphicsPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "graphics",
     );
   }
 
   /**
-   * Log directory for a game.
+   * Return a game's log directory.
    */
   getLogsPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "logs",
     );
   }
 
   /**
-   * Backup directory for a game.
+   * Return a game's backup directory.
    */
   getBackupsPath(
-    gameName: string,
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getGamePath(gameId),
       "backups",
     );
   }
 
   /**
-   * Main compatibility profile file.
+   * Return the compatibility profile JSON path.
    */
-  getProfilePath(
-    gameName: string,
+  getCompatibilityProfilePath(
+    gameId: string,
   ): string {
     return path.join(
-      this.getGamePath(
-        gameName,
-      ),
+      this.getConfigPath(gameId),
       "compatibility.json",
     );
   }
 
   /**
-   * Sanitize a human-readable game name so it can safely
-   * become a directory name.
-   *
-   * This intentionally keeps the name recognizable.
+   * Return the global configuration path.
    */
-  private sanitizeGameName(
-    gameName: string,
+  getGlobalConfigPath(): string {
+    return path.join(
+      this.rootPath,
+      "configuration.json",
+    );
+  }
+
+  /**
+   * Prevent IDs from escaping the compatibility directory.
+   */
+  private sanitizeGameId(
+    gameId: string,
   ): string {
     const sanitized =
-      gameName
+      gameId
         .trim()
-        .replace(
-          /[<>:"/\\|?*\u0000-\u001F]/g,
-          "_",
-        )
-        .replace(
-          /\s+/g,
-          " ",
-        );
+        .replace(/[^a-zA-Z0-9._-]/g, "_");
 
-    return sanitized || "Unknown Game";
+    if (!sanitized) {
+      throw new Error(
+        "Game ID cannot be empty.",
+      );
+    }
+
+    return sanitized;
   }
 }
