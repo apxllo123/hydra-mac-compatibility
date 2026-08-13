@@ -1,173 +1,91 @@
 /**
  * Hydra Mac Compatibility
  *
- * Manages Wine versions available to the compatibility system.
+ * Selects and manages Wine versions for individual games.
  *
- * This class is responsible for:
- * - Tracking discovered Wine versions
- * - Selecting a Wine version
- * - Looking up versions
- * - Removing versions from the in-memory catalog
- *
- * It does NOT install or uninstall Wine.
- * Actual installation will be handled separately.
+ * The version manager does not install Wine itself.
+ * Installation and discovery belong to the Wine subsystem.
  */
 
 import {
-  MacWineVersion,
+  MacWineInstallation,
 } from "../manager/MacCompatibilityTypes";
 
 export class MacWineVersionManager {
-  private readonly versions = new Map<
-    string,
-    MacWineVersion
-  >();
-
-  private selectedVersionId?: string;
-
   /**
-   * Register a discovered Wine version.
+   * Select the best available Wine version for a game.
    *
-   * Existing versions with the same ID are replaced.
-   */
-  registerVersion(
-    version: MacWineVersion,
-  ): void {
-    this.versions.set(
-      version.id,
-      version,
-    );
-  }
-
-  /**
-   * Register multiple Wine versions.
-   */
-  registerVersions(
-    versions: MacWineVersion[],
-  ): void {
-    for (const version of versions) {
-      this.registerVersion(version);
-    }
-  }
-
-  /**
-   * Get a Wine version by its stable ID.
-   */
-  getVersion(
-    versionId: string,
-  ): MacWineVersion | undefined {
-    return this.versions.get(versionId);
-  }
-
-  /**
-   * Check whether a Wine version exists.
-   */
-  hasVersion(
-    versionId: string,
-  ): boolean {
-    return this.versions.has(versionId);
-  }
-
-  /**
-   * Return every known Wine version.
-   */
-  getAvailableVersions(): MacWineVersion[] {
-    return Array.from(
-      this.versions.values(),
-    );
-  }
-
-  /**
-   * Select a Wine version.
+   * For now, selection is deterministic:
+   * 1. Prefer the requested version when available.
+   * 2. Otherwise prefer a working/available version.
+   * 3. Otherwise return undefined.
    */
   selectVersion(
-    versionId: string,
-  ): MacWineVersion {
-    const version =
-      this.versions.get(versionId);
+    installations: MacWineInstallation[],
+    requestedVersion?: string,
+  ): MacWineInstallation | undefined {
+    if (
+      requestedVersion
+    ) {
+      const requested =
+        installations.find(
+          (installation) =>
+            installation.version ===
+              requestedVersion &&
+            installation.available &&
+            installation.working,
+        );
 
-    if (!version) {
-      throw new Error(
-        `Wine version "${versionId}" is not available.`,
-      );
+      if (requested) {
+        return requested;
+      }
     }
 
-    this.selectedVersionId =
-      versionId;
-
-    return version;
-  }
-
-  /**
-   * Return the currently selected Wine version.
-   */
-  getSelectedVersion():
-    | MacWineVersion
-    | undefined {
-    if (!this.selectedVersionId) {
-      return undefined;
-    }
-
-    return this.versions.get(
-      this.selectedVersionId,
+    return installations.find(
+      (installation) =>
+        installation.available &&
+        installation.working,
     );
   }
 
   /**
-   * Return the ID of the selected Wine version.
+   * Find a specific Wine version.
    */
-  getSelectedVersionId():
-    | string
-    | undefined {
-    return this.selectedVersionId;
+  findVersion(
+    installations: MacWineInstallation[],
+    version: string,
+  ): MacWineInstallation | undefined {
+    return installations.find(
+      (installation) =>
+        installation.version === version,
+    );
   }
 
   /**
-   * Clear the selected Wine version.
+   * Return only Wine versions that can currently be used.
    */
-  clearSelectedVersion(): void {
-    this.selectedVersionId =
-      undefined;
+  getAvailableVersions(
+    installations: MacWineInstallation[],
+  ): MacWineInstallation[] {
+    return installations.filter(
+      (installation) =>
+        installation.available &&
+        installation.working,
+    );
   }
 
   /**
-   * Remove a Wine version from the catalog.
-   *
-   * This does NOT uninstall Wine from the Mac.
+   * Determine whether a requested Wine version can be used.
    */
-  removeVersion(
-    versionId: string,
+  isVersionAvailable(
+    installations: MacWineInstallation[],
+    version: string,
   ): boolean {
-    const removed =
-      this.versions.delete(
-        versionId,
-      );
-
-    if (
-      this.selectedVersionId ===
-      versionId
-    ) {
-      this.clearSelectedVersion();
-    }
-
-    return removed;
-  }
-
-  /**
-   * Remove every known Wine version.
-   *
-   * This only clears the in-memory catalog.
-   * It does NOT uninstall anything.
-   */
-  clear(): void {
-    this.versions.clear();
-    this.clearSelectedVersion();
-  }
-
-  /**
-   * Return the number of known Wine versions.
-   */
-  count(): number {
-    return this.versions.size;
+    return installations.some(
+      (installation) =>
+        installation.version === version &&
+        installation.available &&
+        installation.working,
+    );
   }
 }
