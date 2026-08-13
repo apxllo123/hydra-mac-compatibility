@@ -1,15 +1,14 @@
 /**
  * Hydra Mac Compatibility
  *
- * In-memory store for game compatibility profiles.
+ * Stores and retrieves Windows game compatibility profiles.
  *
- * This class manages profile storage independently from the
- * filesystem. Persistent storage will be connected through
- * the storage subsystem later.
+ * The store is intentionally separated from the game profile
+ * itself so persistence can later be connected to the storage
+ * subsystem without changing the rest of the compatibility code.
  */
 
 import {
-  CompatibilityStatus,
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
@@ -22,9 +21,9 @@ export class MacGameProfileStore {
   >();
 
   /**
-   * Add a new game profile.
+   * Create and store a new game profile.
    */
-  add(
+  create(
     profile: MacGameCompatibilityProfile,
   ): MacGameProfile {
     if (
@@ -70,7 +69,7 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Retrieve a game profile.
+   * Retrieve a profile by game ID.
    */
   get(
     gameId: string,
@@ -81,7 +80,7 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Check whether a game exists.
+   * Check whether a profile exists.
    */
   has(
     gameId: string,
@@ -92,9 +91,10 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Remove a game profile.
+   * Remove a profile from the store.
    *
-   * This does NOT delete files from disk.
+   * This only removes the in-memory profile.
+   * It does not delete game files.
    */
   remove(
     gameId: string,
@@ -114,20 +114,14 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Find profiles by compatibility status.
+   * Return the number of stored profiles.
    */
-  findByStatus(
-    status: CompatibilityStatus,
-  ): MacGameProfile[] {
-    return this.getAll().filter(
-      (profile) =>
-        profile.getStatus() ===
-        status,
-    );
+  count(): number {
+    return this.profiles.size;
   }
 
   /**
-   * Find a profile by its human-readable game name.
+   * Find a profile by human-readable game name.
    */
   findByGameName(
     gameName: string,
@@ -148,16 +142,21 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Return the number of stored profiles.
+   * Export all profiles as plain compatibility objects.
+   *
+   * This is useful for the storage subsystem.
    */
-  count(): number {
-    return this.profiles.size;
+  exportAll(): MacGameCompatibilityProfile[] {
+    return this.getAll().map(
+      (profile) =>
+        profile.getProfile(),
+    );
   }
 
   /**
-   * Remove every in-memory profile.
+   * Clear every stored profile.
    *
-   * This does NOT delete game data from disk.
+   * This does not delete files from disk.
    */
   clear(): void {
     this.profiles.clear();
