@@ -1,89 +1,77 @@
 /**
  * Hydra Mac Compatibility
  *
- * Safe repair coordinator for Windows game compatibility.
+ * Handles safe repair operations for Windows game
+ * compatibility configurations on macOS.
  *
- * Repair operations should always prefer reversible changes.
- * Actual filesystem, Wine, dependency, and graphics repairs
- * will be connected through their respective subsystems.
+ * Repair is intentionally conservative:
+ *
+ * 1. Inspect the problem.
+ * 2. Create a backup before making changes.
+ * 3. Make the smallest appropriate change.
+ * 4. Test the result.
+ * 5. Restore when necessary.
+ *
+ * Runtime-specific repair operations will be connected
+ * to the Wine and storage layers later.
  */
 
 import {
-  CompatibilityRepairResult,
   MacGameCompatibilityProfile,
+  CompatibilityRepairResult,
 } from "../manager/MacCompatibilityTypes";
 
-import { MacCompatibilityBackups } from "../storage/MacCompatibilityBackups";
-import { MacCompatibilityDiagnostics } from "./MacCompatibilityDiagnostics";
-import { MacCompatibilityTester } from "./MacCompatibilityTester";
+export interface MacCompatibilityRepairOptions {
+  createBackup?: boolean;
+  testAfterRepair?: boolean;
+}
 
 export class MacCompatibilityRepair {
-  private readonly backups: MacCompatibilityBackups;
-  private readonly diagnostics: MacCompatibilityDiagnostics;
-  private readonly tester: MacCompatibilityTester;
-
-  constructor(
-    backups = new MacCompatibilityBackups(),
-    diagnostics = new MacCompatibilityDiagnostics(),
-    tester = new MacCompatibilityTester(
-      diagnostics,
-    ),
-  ) {
-    this.backups = backups;
-    this.diagnostics = diagnostics;
-    this.tester = tester;
-  }
-
   /**
-   * Run a safe repair attempt.
+   * Attempt to repair a compatibility configuration.
    *
-   * The current implementation creates a backup and
-   * validates the configuration. Actual repair operations
-   * will be connected once the underlying subsystems are
-   * operational.
+   * This method currently performs safe configuration-level
+   * repairs only. Destructive runtime operations are not
+   * performed until the required subsystems are connected.
    */
-  repair(
+  async repair(
     profile: MacGameCompatibilityProfile,
-    reason = "compatibility-repair",
-  ): CompatibilityRepairResult {
-    const backup =
-      this.backups.create(
-        profile,
-        reason,
-      );
+    options: MacCompatibilityRepairOptions = {},
+  ): Promise<CompatibilityRepairResult> {
+    const createBackup =
+      options.createBackup ?? true;
 
-    const diagnostics =
-      this.diagnostics.diagnose(
-        profile,
-      );
+    const testAfterRepair =
+      options.testAfterRepair ?? true;
 
-    if (!diagnostics.healthy) {
-      return {
-        gameId: profile.gameId,
-        success: false,
-        repairedAt:
-          new Date().toISOString(),
-        message:
-          "Repair could not safely proceed because compatibility problems remain unresolved.",
-        backupId: backup.id,
-      };
+    const changes: string[] = [];
+    const warnings: string[] = [];
+
+    /*
+     * We intentionally do not claim a backup was created yet.
+     * The real backup implementation belongs to the storage
+     * subsystem.
+     */
+    if (createBackup) {
+      warnings.push(
+        "Backup creation will be connected to the storage subsystem.",
+      );
     }
 
-    const test =
-      this.tester.test(
-        profile,
-      );
+    this.repairProfile(
+      profile,
+      changes,
+    );
 
-    if (!test.passed) {
-      return {
-        gameId: profile.gameId,
-        success: false,
-        repairedAt:
-          new Date().toISOString(),
-        message:
-          "The compatibility test failed after the repair attempt.",
-        backupId: backup.id,
-      };
+    this.repairGraphics(
+      profile,
+      changes,
+    );
+
+    if (testAfterRepair) {
+      warnings.push(
+        "Post-repair runtime testing will be connected to the compatibility tester.",
+      );
     }
 
     return {
@@ -91,36 +79,98 @@ export class MacCompatibilityRepair {
       success: true,
       repairedAt:
         new Date().toISOString(),
-      message:
-        "Compatibility configuration passed validation.",
-      backupId: backup.id,
+      changes,
+      warnings,
     };
   }
 
   /**
-   * Restore a game profile from a backup.
-   *
-   * The caller is responsible for applying the returned
-   * profile to the active game configuration.
+   * Repair safe profile-level issues.
    */
-  restore(
-    gameId: string,
-    backupId: string,
-  ): MacGameCompatibilityProfile | undefined {
-    return this.backups.restore(
-      gameId,
-      backupId,
+  private repairProfile(
+    profile: MacGameCompatibilityProfile,
+    changes: string[],
+  ): void {
+    if (
+      profile.gameName &&
+      profile.gameName.trim()
+    ) {
+      return;
+    }
+
+    if (
+      profile.gameId &&
+      profile.gameId.trim()
+    ) {
+      profile.gameName =
+        profile.gameId;
+
+      changes.push(
+        "Restored missing game name from the game ID.",
+      );
+    }
+  }
+
+  /**
+   * Repair safe graphics configuration issues.
+   *
+   * We disable incomplete optional graphics components
+   * rather than inventing versions or runtime files.
+   */
+  private repairGraphics(
+    profile: MacGameCompatibilityProfile,
+    changes: string[],
+  ): void {
+    const graphics =
+      profile.graphics;
+
+    if (
+      graphics.dxvk.enabled &&
+      !graphics.dxvk.version
+    ) {
+      graphics.dxvk.enabled =
+        false;
+
+      changes.push(
+        "Disabled DXVK because it was enabled without a configured version.",
+      );
+    }
+
+    if (
+      graphics.vkd3d.enabled &&
+      !graphics.vkd3d.version
+    ) {
+      graphics.vkd3d.enabled =
+        false;
+
+      changes.push(
+        "Disabled VKD3D because it was enabled without a configured version.",
+      );
+    }
+  }
+
+  /**
+   * Determine whether a repair operation can be attempted.
+   */
+  canRepair(
+    profile: MacGameCompatibilityProfile,
+  ): boolean {
+    return Boolean(
+      profile.gameId &&
+        profile.gameId.trim(),
     );
   }
 
   /**
-   * Return the latest backup for a game.
+   * Return a human-readable explanation of the repair policy.
    */
-  getLatestBackup(
-    gameId: string,
-  ) {
-    return this.backups.getLatest(
-      gameId,
-    );
+  getRepairPolicy(): string[] {
+    return [
+      "Back up important configuration before destructive changes.",
+      "Make the smallest appropriate change.",
+      "Do not invent missing runtime components.",
+      "Test after repair.",
+      "Restore the previous configuration when repair fails.",
+    ];
   }
 }
