@@ -1,10 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Central coordinator for Wine compatibility on macOS.
+ * Manages available Wine versions and per-game Wine selection.
  *
- * The manager coordinates Wine detection and version selection.
- * It does not contain platform-specific detection logic itself.
+ * This class manages configuration only. It does not install
+ * or remove Wine versions.
  */
 
 import {
@@ -12,105 +12,153 @@ import {
   MacWineInstallation,
 } from "../manager/MacCompatibilityTypes";
 
-import { MacWineDetector } from "./MacWineDetector";
-import { MacWineVersionManager } from "./MacWineVersionManager";
-
-export class MacWineManager {
-  private readonly detector: MacWineDetector;
-  private readonly versionManager: MacWineVersionManager;
-
-  constructor(
-    detector = new MacWineDetector(),
-    versionManager = new MacWineVersionManager(),
-  ) {
-    this.detector = detector;
-    this.versionManager = versionManager;
-  }
+export class MacWineVersionManager {
+  private readonly installations = new Map<
+    string,
+    MacWineInstallation
+  >();
 
   /**
-   * Detect Wine installations available to Hydra.
+   * Register a detected Wine installation.
    */
-  detectInstallations(): MacWineInstallation[] {
-    return this.detector.detect();
-  }
-
-  /**
-   * Return Wine installations that are currently usable.
-   */
-  getUsableInstallations(): MacWineInstallation[] {
-    return this.detector.getUsable(
-      this.detectInstallations(),
+  register(
+    installation: MacWineInstallation,
+  ): void {
+    this.installations.set(
+      installation.id,
+      {
+        ...installation,
+      },
     );
   }
 
   /**
-   * Find a Wine installation by ID.
+   * Remove a Wine installation from the registry.
+   *
+   * This does not uninstall Wine from the Mac.
    */
-  findById(
+  unregister(
     wineId: string,
-  ): MacWineInstallation | undefined {
-    return this.detector.findById(
-      this.detectInstallations(),
+  ): boolean {
+    return this.installations.delete(
       wineId,
     );
   }
 
   /**
-   * Find a Wine installation by version.
+   * Return every known Wine installation.
    */
-  findByVersion(
-    version: string,
-  ): MacWineInstallation | undefined {
-    return this.detector.findByVersion(
-      this.detectInstallations(),
-      version,
+  getAll(): MacWineInstallation[] {
+    return Array.from(
+      this.installations.values(),
+    ).map(
+      (installation) => ({
+        ...installation,
+      }),
     );
   }
 
   /**
-   * Select a Wine installation for a game.
+   * Return only currently available Wine versions.
+   */
+  getAvailable(): MacWineInstallation[] {
+    return this.getAll().filter(
+      (installation) =>
+        installation.available,
+    );
+  }
+
+  /**
+   * Retrieve a Wine installation by ID.
+   */
+  get(
+    wineId: string,
+  ): MacWineInstallation | undefined {
+    const installation =
+      this.installations.get(
+        wineId,
+      );
+
+    return installation
+      ? {
+          ...installation,
+        }
+      : undefined;
+  }
+
+  /**
+   * Select a Wine version for a specific game.
    *
-   * The game's requested Wine version is preferred when it
-   * is available and working.
+   * This updates the game's in-memory profile.
+   * Persistence is handled by storage.
    */
   selectForGame(
     profile: MacGameCompatibilityProfile,
-  ): MacWineInstallation | undefined {
-    const installations =
-      this.detectInstallations();
+    wineId: string,
+  ): boolean {
+    const installation =
+      this.installations.get(
+        wineId,
+      );
 
-    return this.versionManager.selectVersion(
-      installations,
-      profile.wine?.version,
+    if (
+      !installation ||
+      !installation.available
+    ) {
+      return false;
+    }
+
+    profile.wine = {
+      ...profile.wine,
+      id: installation.id,
+      version:
+        installation.version,
+      executablePath:
+        installation.executablePath,
+    };
+
+    return true;
+  }
+
+  /**
+   * Find the Wine installation currently assigned
+   * to a game.
+   */
+  getSelectedForGame(
+    profile: MacGameCompatibilityProfile,
+  ): MacWineInstallation | undefined {
+    if (!profile.wine?.id) {
+      return undefined;
+    }
+
+    return this.get(
+      profile.wine.id,
     );
   }
 
   /**
-   * Determine whether the Wine version recorded by a game
-   * is currently available.
+   * Determine whether a game's selected Wine version
+   * is still available.
    */
   isGameWineAvailable(
     profile: MacGameCompatibilityProfile,
   ): boolean {
-    const version =
-      profile.wine?.version;
+    const selected =
+      this.getSelectedForGame(
+        profile,
+      );
 
-    if (!version) {
-      return false;
-    }
-
-    return this.versionManager.isVersionAvailable(
-      this.detectInstallations(),
-      version,
+    return Boolean(
+      selected?.available,
     );
   }
 
   /**
-   * Return Wine versions available for selection.
+   * Clear the in-memory Wine registry.
+   *
+   * This does not uninstall anything.
    */
-  getAvailableVersions(): MacWineInstallation[] {
-    return this.versionManager.getAvailableVersions(
-      this.detectInstallations(),
-    );
+  clear(): void {
+    this.installations.clear();
   }
 }
