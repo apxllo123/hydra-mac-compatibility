@@ -1,159 +1,328 @@
 /**
  * Hydra Mac Compatibility
  *
- * Backup coordination for Windows game compatibility environments.
+ * Backup coordination for Windows game compatibility data.
  *
- * This class is responsible for tracking backup operations.
- * Actual filesystem copying/restoration will be connected to the
- * platform storage layer as the project is integrated into Hydra.
+ * This class is intentionally focused on backup metadata and
+ * backup lifecycle decisions. Actual filesystem copying will
+ * be connected to the storage implementation.
  */
 
 import {
-  CompatibilityBackup,
+  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
-export interface CompatibilityBackupRequest {
+export interface MacCompatibilityBackup {
+  id: string;
   gameId: string;
-  sourcePath: string;
-  description?: string;
-}
-
-export interface CompatibilityRestoreResult {
-  success: boolean;
-  backupId: string;
-  restoredPath?: string;
-  error?: string;
+  gameName: string;
+  createdAt: string;
+  reason: string;
+  profile: MacGameCompatibilityProfile;
 }
 
 export class MacCompatibilityBackups {
   private readonly backups = new Map<
     string,
-    CompatibilityBackup[]
+    MacCompatibilityBackup[]
   >();
 
   /**
-   * Register a backup for a game.
+   * Create an in-memory backup of a game's compatibility profile.
    *
-   * This currently records the backup metadata. The actual
-   * filesystem copy will be implemented by the storage layer.
+   * The physical filesystem backup will be connected later.
    */
-  registerBackup(
-    gameId: string,
-    backup: CompatibilityBackup,
-  ): void {
-    const gameBackups = this.backups.get(gameId) ?? [];
+  create(
+    profile: MacGameCompatibilityProfile,
+    reason = "manual",
+  ): MacCompatibilityBackup {
+    const backup: MacCompatibilityBackup = {
+      id: this.createBackupId(
+        profile.gameId,
+      ),
+      gameId: profile.gameId,
+      gameName: profile.gameName,
+      createdAt:
+        new Date().toISOString(),
+      reason,
+      profile: this.cloneProfile(
+        profile,
+      ),
+    };
 
-    gameBackups.push(backup);
+    const existing =
+      this.backups.get(
+        profile.gameId,
+      ) ?? [];
 
-    this.backups.set(gameId, gameBackups);
-  }
+    existing.push(
+      backup,
+    );
 
-  /**
-   * Return all backups belonging to a game.
-   */
-  getBackups(gameId: string): CompatibilityBackup[] {
-    return [
-      ...(this.backups.get(gameId) ?? []),
-    ];
-  }
+    this.backups.set(
+      profile.gameId,
+      existing,
+    );
 
-  /**
-   * Find a specific backup by ID.
-   */
-  getBackup(
-    gameId: string,
-    backupId: string,
-  ): CompatibilityBackup | undefined {
-    return this.backups
-      .get(gameId)
-      ?.find((backup) => backup.id === backupId);
-  }
-
-  /**
-   * Check whether a backup exists.
-   */
-  hasBackup(
-    gameId: string,
-    backupId: string,
-  ): boolean {
-    return Boolean(
-      this.getBackup(gameId, backupId),
+    return this.cloneBackup(
+      backup,
     );
   }
 
   /**
-   * Remove backup metadata from the in-memory registry.
-   *
-   * This does NOT delete the physical backup.
-   * Physical deletion belongs to the storage layer.
+   * Return all backups for a game.
    */
-  unregisterBackup(
+  getAll(
     gameId: string,
-    backupId: string,
-  ): boolean {
-    const gameBackups = this.backups.get(gameId);
-
-    if (!gameBackups) {
-      return false;
-    }
-
-    const originalLength = gameBackups.length;
-
-    const remainingBackups = gameBackups.filter(
-      (backup) => backup.id !== backupId,
-    );
-
-    if (remainingBackups.length === originalLength) {
-      return false;
-    }
-
-    if (remainingBackups.length === 0) {
-      this.backups.delete(gameId);
-    } else {
-      this.backups.set(
+  ): MacCompatibilityBackup[] {
+    return (
+      this.backups.get(
         gameId,
-        remainingBackups,
+      ) ?? []
+    ).map(
+      (backup) =>
+        this.cloneBackup(
+          backup,
+        ),
+    );
+  }
+
+  /**
+   * Return the most recent backup.
+   */
+  getLatest(
+    gameId: string,
+  ):
+    | MacCompatibilityBackup
+    | undefined {
+    const backups =
+      this.backups.get(
+        gameId,
       );
+
+    if (
+      !backups ||
+      backups.length === 0
+    ) {
+      return undefined;
     }
+
+    return this.cloneBackup(
+      backups[
+        backups.length - 1
+      ],
+    );
+  }
+
+  /**
+   * Find a specific backup.
+   */
+  get(
+    gameId: string,
+    backupId: string,
+  ):
+    | MacCompatibilityBackup
+    | undefined {
+    const backup =
+      this.backups
+        .get(gameId)
+        ?.find(
+          (item) =>
+            item.id ===
+            backupId,
+        );
+
+    return backup
+      ? this.cloneBackup(
+          backup,
+        )
+      : undefined;
+  }
+
+  /**
+   * Restore a profile from a backup.
+   *
+   * This returns the saved profile.
+   * Actual filesystem restoration will be connected later.
+   */
+  restore(
+    gameId: string,
+    backupId: string,
+  ):
+    | MacGameCompatibilityProfile
+    | undefined {
+    const backup =
+      this.get(
+        gameId,
+        backupId,
+      );
+
+    if (!backup) {
+      return undefined;
+    }
+
+    return this.cloneProfile(
+      backup.profile,
+    );
+  }
+
+  /**
+   * Remove one backup.
+   */
+  remove(
+    gameId: string,
+    backupId: string,
+  ): boolean {
+    const backups =
+      this.backups.get(
+        gameId,
+      );
+
+    if (!backups) {
+      return false;
+    }
+
+    const index =
+      backups.findIndex(
+        (backup) =>
+          backup.id ===
+          backupId,
+      );
+
+    if (index === -1) {
+      return false;
+    }
+
+    backups.splice(
+      index,
+      1,
+    );
 
     return true;
   }
 
   /**
-   * Remove all tracked backup metadata for a game.
+   * Remove every backup for a game.
+   */
+  clear(
+    gameId: string,
+  ): void {
+    this.backups.delete(
+      gameId,
+    );
+  }
+
+  /**
+   * Limit the number of backups retained for a game.
    *
-   * This does NOT delete physical backup files.
+   * The oldest backups are removed first.
    */
-  clearGameBackups(gameId: string): void {
-    this.backups.delete(gameId);
-  }
-
-  /**
-   * Remove all tracked backup metadata.
-   *
-   * This does NOT delete physical backup files.
-   */
-  clear(): void {
-    this.backups.clear();
-  }
-
-  /**
-   * Return the number of tracked backups for a game.
-   */
-  getBackupCount(gameId: string): number {
-    return this.backups.get(gameId)?.length ?? 0;
-  }
-
-  /**
-   * Return the total number of tracked backups.
-   */
-  getTotalBackupCount(): number {
-    let count = 0;
-
-    for (const gameBackups of this.backups.values()) {
-      count += gameBackups.length;
+  prune(
+    gameId: string,
+    maximum: number,
+  ): MacCompatibilityBackup[] {
+    if (
+      !Number.isInteger(
+        maximum,
+      ) ||
+      maximum < 1
+    ) {
+      throw new Error(
+        "Backup maximum must be a positive integer.",
+      );
     }
 
-    return count;
+    const backups =
+      this.backups.get(
+        gameId,
+      ) ?? [];
+
+    while (
+      backups.length >
+      maximum
+    ) {
+      backups.shift();
+    }
+
+    return this.getAll(
+      gameId,
+    );
+  }
+
+  /**
+   * Generate a unique backup ID.
+   */
+  private createBackupId(
+    gameId: string,
+  ): string {
+    return [
+      gameId,
+      Date.now().toString(36),
+      Math.random()
+        .toString(36)
+        .slice(2, 8),
+    ].join("-");
+  }
+
+  /**
+   * Safely clone a backup.
+   */
+  private cloneBackup(
+    backup: MacCompatibilityBackup,
+  ): MacCompatibilityBackup {
+    return {
+      ...backup,
+      profile:
+        this.cloneProfile(
+          backup.profile,
+        ),
+    };
+  }
+
+  /**
+   * Safely clone a compatibility profile.
+   */
+  private cloneProfile(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameCompatibilityProfile {
+    return {
+      ...profile,
+
+      wine: profile.wine
+        ? {
+            ...profile.wine,
+          }
+        : profile.wine,
+
+      graphics: profile.graphics
+        ? {
+            ...profile.graphics,
+
+            environmentVariables: {
+              ...profile.graphics
+                .environmentVariables,
+            },
+
+            compatibilityFlags: [
+              ...profile.graphics
+                .compatibilityFlags,
+            ],
+          }
+        : profile.graphics,
+
+      dependencies:
+        profile.dependencies?.map(
+          (dependency) => ({
+            ...dependency,
+          }),
+        ),
+
+      lastKnownGoodConfiguration:
+        profile.lastKnownGoodConfiguration
+          ? this.cloneProfile(
+              profile.lastKnownGoodConfiguration,
+            )
+          : undefined,
+    };
   }
 }
