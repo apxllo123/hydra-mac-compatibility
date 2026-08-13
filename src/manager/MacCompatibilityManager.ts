@@ -1,17 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Main coordinator for Windows game compatibility on macOS.
+ * Central coordinator for Windows game compatibility on macOS.
  *
- * The manager is intentionally lightweight.
- * Specialized work belongs to the appropriate subsystem:
- *
- * - Wine management
- * - Game profiles
- * - Diagnostics
- * - Dependencies
- * - Graphics
- * - Storage
+ * The manager coordinates compatibility subsystems but does not
+ * contain their specialized implementation logic.
  */
 
 import {
@@ -22,44 +15,46 @@ import {
 } from "./MacCompatibilityTypes";
 
 export class MacCompatibilityManager {
-  /**
-   * Registered game compatibility profiles.
-   */
   private readonly profiles = new Map<
     string,
     MacGameCompatibilityProfile
   >();
 
   /**
-   * Register or replace a game's compatibility profile.
+   * Register a game compatibility profile.
+   *
+   * Existing profiles with the same game ID are replaced.
    */
   registerProfile(profile: MacGameCompatibilityProfile): void {
     this.profiles.set(profile.gameId, profile);
   }
 
   /**
-   * Remove a game's compatibility profile.
+   * Remove a game compatibility profile.
+   *
+   * This only removes the profile from memory.
+   * It does not delete files or game data.
    */
   unregisterProfile(gameId: string): boolean {
     return this.profiles.delete(gameId);
   }
 
   /**
-   * Retrieve a game's compatibility profile.
+   * Retrieve a game compatibility profile.
    */
   getProfile(gameId: string): MacGameCompatibilityProfile | undefined {
     return this.profiles.get(gameId);
   }
 
   /**
-   * Check whether a game has a registered compatibility profile.
+   * Check whether a game has a registered profile.
    */
   hasProfile(gameId: string): boolean {
     return this.profiles.has(gameId);
   }
 
   /**
-   * Return all registered game profiles.
+   * Return all registered profiles.
    */
   getProfiles(): MacGameCompatibilityProfile[] {
     return Array.from(this.profiles.values());
@@ -73,7 +68,7 @@ export class MacCompatibilityManager {
   }
 
   /**
-   * Update the compatibility status of a game.
+   * Update a game's compatibility status.
    */
   setStatus(
     gameId: string,
@@ -86,14 +81,15 @@ export class MacCompatibilityManager {
     }
 
     profile.status = status;
+    profile.lastUpdated = new Date().toISOString();
+
     return true;
   }
 
   /**
    * Record the result of a compatibility test.
    *
-   * The actual testing is performed by MacCompatibilityTester.
-   * This method only records the result.
+   * Actual testing belongs to MacCompatibilityTester.
    */
   recordTestResult(result: CompatibilityTestResult): boolean {
     const profile = this.profiles.get(result.gameId);
@@ -103,6 +99,7 @@ export class MacCompatibilityManager {
     }
 
     profile.lastTested = result.testedAt;
+    profile.lastUpdated = result.testedAt;
     profile.status = result.passed ? "ready" : "degraded";
 
     return true;
@@ -111,8 +108,7 @@ export class MacCompatibilityManager {
   /**
    * Record diagnostic information.
    *
-   * The actual diagnostic work is performed by
-   * MacCompatibilityDiagnostics.
+   * Actual diagnostic work belongs to MacCompatibilityDiagnostics.
    */
   recordDiagnosticResult(
     result: CompatibilityDiagnosticResult,
@@ -123,19 +119,21 @@ export class MacCompatibilityManager {
       return false;
     }
 
+    profile.lastDiagnosed = result.diagnosedAt;
+    profile.lastUpdated = result.diagnosedAt;
+
     if (result.healthy) {
       profile.status = "ready";
-    } else if (
-      result.diagnostics.some(
-        (diagnostic) =>
-          diagnostic.severity === "critical" ||
-          diagnostic.severity === "error",
-      )
-    ) {
-      profile.status = "broken";
-    } else {
-      profile.status = "degraded";
+      return true;
     }
+
+    const hasCriticalIssue = result.diagnostics.some(
+      (diagnostic) =>
+        diagnostic.severity === "critical" ||
+        diagnostic.severity === "error",
+    );
+
+    profile.status = hasCriticalIssue ? "broken" : "degraded";
 
     return true;
   }
@@ -143,8 +141,7 @@ export class MacCompatibilityManager {
   /**
    * Record the result of a repair operation.
    *
-   * The actual repair work is performed by
-   * MacCompatibilityRepair.
+   * Actual repair work belongs to MacCompatibilityRepair.
    */
   recordRepairResult(result: CompatibilityRepairResult): boolean {
     const profile = this.profiles.get(result.gameId);
@@ -153,16 +150,17 @@ export class MacCompatibilityManager {
       return false;
     }
 
+    profile.lastRepaired = result.repairedAt;
+    profile.lastUpdated = result.repairedAt;
     profile.status = result.success ? "ready" : "broken";
 
     return true;
   }
 
   /**
-   * Clear every registered profile.
+   * Clear all profiles from the in-memory manager.
    *
-   * This only clears the manager's in-memory registry.
-   * It does NOT delete files or game data.
+   * This does NOT delete game data from disk.
    */
   clearProfiles(): void {
     this.profiles.clear();
