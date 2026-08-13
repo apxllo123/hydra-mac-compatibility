@@ -1,11 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Central coordinator for per-game graphics compatibility.
+ * Coordinates per-game graphics configurations.
  *
- * The manager keeps graphics configuration isolated to the
- * individual game and delegates configuration behavior to
- * MacGraphicsProfile.
+ * The manager owns the collection of graphics profiles,
+ * while MacGraphicsProfile handles individual configuration.
  */
 
 import {
@@ -22,7 +21,7 @@ export class MacGraphicsManager {
   >();
 
   /**
-   * Create or replace the graphics profile for a game.
+   * Create and register a graphics profile for a game.
    */
   register(
     gameId: string,
@@ -42,8 +41,7 @@ export class MacGraphicsManager {
   }
 
   /**
-   * Create a graphics profile from an existing game
-   * compatibility profile.
+   * Register graphics settings directly from a game profile.
    */
   registerFromGameProfile(
     gameProfile: MacGameCompatibilityProfile,
@@ -55,16 +53,18 @@ export class MacGraphicsManager {
   }
 
   /**
-   * Get a game's graphics profile.
+   * Retrieve a game's graphics profile.
    */
   get(
     gameId: string,
   ): MacGraphicsProfile | undefined {
-    return this.profiles.get(gameId);
+    return this.profiles.get(
+      gameId,
+    );
   }
 
   /**
-   * Check whether graphics configuration exists.
+   * Check whether graphics settings exist for a game.
    */
   has(
     gameId: string,
@@ -77,8 +77,7 @@ export class MacGraphicsManager {
   /**
    * Remove a game's graphics profile.
    *
-   * This only removes the in-memory graphics configuration.
-   * It does not delete files from disk.
+   * This does not modify files on disk.
    */
   remove(
     gameId: string,
@@ -101,59 +100,42 @@ export class MacGraphicsManager {
   }
 
   /**
-   * Update a game's complete graphics configuration.
+   * Return the number of graphics profiles.
    */
-  update(
-    gameId: string,
-    configuration: MacGraphicsConfiguration,
+  count(): number {
+    return this.profiles.size;
+  }
+
+  /**
+   * Apply a graphics configuration to a game profile.
+   *
+   * This updates the in-memory compatibility profile.
+   * Persistence will be handled by the storage subsystem.
+   */
+  applyToGameProfile(
+    gameProfile: MacGameCompatibilityProfile,
   ): boolean {
-    const profile =
-      this.profiles.get(
-        gameId,
+    const graphicsProfile =
+      this.get(
+        gameProfile.gameId,
       );
 
-    if (!profile) {
+    if (!graphicsProfile) {
       return false;
     }
 
-    profile.setConfiguration(
-      configuration,
-    );
+    gameProfile.graphics =
+      graphicsProfile.getConfiguration();
 
     return true;
   }
 
   /**
-   * Validate a game's graphics configuration.
-   */
-  isValid(
-    gameId: string,
-  ): boolean {
-    const profile =
-      this.profiles.get(
-        gameId,
-      );
-
-    if (!profile) {
-      return false;
-    }
-
-    return profile.isValid();
-  }
-
-  /**
-   * Clear every registered graphics profile.
+   * Remove every registered graphics profile.
    *
-   * This does not delete any configuration files.
+   * This only clears the manager's in-memory state.
    */
   clear(): void {
     this.profiles.clear();
-  }
-
-  /**
-   * Return the number of registered graphics profiles.
-   */
-  count(): number {
-    return this.profiles.size;
   }
 }
