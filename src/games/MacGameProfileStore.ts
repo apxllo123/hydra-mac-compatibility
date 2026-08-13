@@ -1,188 +1,210 @@
 /**
  * Hydra Mac Compatibility
  *
- * Persistent storage for individual game compatibility profiles.
+ * Persistent storage coordination for game compatibility profiles.
  *
- * This class is responsible for reading and writing
- * compatibility.json files.
+ * This class sits between the game profile model and the filesystem.
+ * The actual filesystem implementation will be connected as the
+ * project is integrated into Hydra.
  */
 
-import { promises as fs } from "node:fs";
-
-import type {
+import {
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
-import {
-  MacCompatibilityPaths,
-} from "../storage/MacCompatibilityPaths";
+import { MacGameProfile } from "./MacGameProfile";
 
 export class MacGameProfileStore {
-  private readonly paths: MacCompatibilityPaths;
-
-  constructor(paths: MacCompatibilityPaths) {
-    this.paths = paths;
-  }
+  private readonly profiles = new Map<
+    string,
+    MacGameCompatibilityProfile
+  >();
 
   /**
-   * Save a game compatibility profile to compatibility.json.
+   * Save a game profile to the in-memory store.
+   *
+   * Persistent JSON storage will be connected later.
    */
-  async save(
+  save(
     profile: MacGameCompatibilityProfile,
-  ): Promise<void> {
-    const gamePath = this.paths.getGamePath(
-      profile.gameName,
-    );
-
-    const profilePath =
-      this.paths.getGameCompatibilityProfilePath(
-        profile.gameName,
-      );
-
-    await fs.mkdir(gamePath, {
-      recursive: true,
-    });
-
-    const serializedProfile = JSON.stringify(
-      profile,
-      null,
-      2,
-    );
-
-    await fs.writeFile(
-      profilePath,
-      serializedProfile,
-      "utf8",
+  ): void {
+    this.profiles.set(
+      profile.gameId,
+      this.cloneProfile(profile),
     );
   }
 
   /**
-   * Load a game's compatibility profile.
+   * Save a MacGameProfile model.
+   */
+  saveModel(
+    profile: MacGameProfile,
+  ): void {
+    this.save(profile.toProfile());
+  }
+
+  /**
+   * Load a game profile by its stable game ID.
+   */
+  load(
+    gameId: string,
+  ): MacGameCompatibilityProfile | undefined {
+    const profile = this.profiles.get(gameId);
+
+    if (!profile) {
+      return undefined;
+    }
+
+    return this.cloneProfile(profile);
+  }
+
+  /**
+   * Load a game profile as a MacGameProfile model.
+   */
+  loadModel(
+    gameId: string,
+  ): MacGameProfile | undefined {
+    const profile = this.load(gameId);
+
+    if (!profile) {
+      return undefined;
+    }
+
+    return new MacGameProfile(profile);
+  }
+
+  /**
+   * Check whether a stored profile exists.
+   */
+  exists(gameId: string): boolean {
+    return this.profiles.has(gameId);
+  }
+
+  /**
+   * Delete a stored profile.
    *
-   * Returns undefined when no profile exists.
+   * This only removes the profile from the store.
+   * It does NOT delete the game's compatibility directory.
    */
-  async load(
-    gameName: string,
-  ): Promise<MacGameCompatibilityProfile | undefined> {
-    const profilePath =
-      this.paths.getGameCompatibilityProfilePath(
-        gameName,
-      );
-
-    try {
-      const contents = await fs.readFile(
-        profilePath,
-        "utf8",
-      );
-
-      return JSON.parse(
-        contents,
-      ) as MacGameCompatibilityProfile;
-    } catch (error) {
-      if (
-        this.isFileNotFoundError(error)
-      ) {
-        return undefined;
-      }
-
-      throw error;
-    }
+  delete(gameId: string): boolean {
+    return this.profiles.delete(gameId);
   }
 
   /**
-   * Check whether a game's compatibility profile exists.
+   * Return all stored profiles.
    */
-  async exists(
-    gameName: string,
-  ): Promise<boolean> {
-    const profilePath =
-      this.paths.getGameCompatibilityProfilePath(
-        gameName,
-      );
-
-    try {
-      await fs.access(profilePath);
-      return true;
-    } catch (error) {
-      if (
-        this.isFileNotFoundError(error)
-      ) {
-        return false;
-      }
-
-      throw error;
-    }
+  getAll(): MacGameCompatibilityProfile[] {
+    return Array.from(this.profiles.values()).map(
+      (profile) => this.cloneProfile(profile),
+    );
   }
 
   /**
-   * Delete a game's compatibility profile.
+   * Return the number of stored profiles.
+   */
+  count(): number {
+    return this.profiles.size;
+  }
+
+  /**
+   * Remove every stored profile.
+   */
+  clear(): void {
+    this.profiles.clear();
+  }
+
+  /**
+   * Create a safe copy of a profile.
    *
-   * This only removes compatibility.json.
-   * It does NOT delete the game's prefix or other data.
+   * This prevents callers from accidentally modifying the
+   * stored profile without explicitly saving the changes.
    */
-  async deleteProfile(
-    gameName: string,
-  ): Promise<boolean> {
-    const profilePath =
-      this.paths.getGameCompatibilityProfilePath(
-        gameName,
-      );
+  private cloneProfile(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameCompatibilityProfile {
+    return {
+      ...profile,
 
-    try {
-      await fs.unlink(profilePath);
-      return true;
-    } catch (error) {
-      if (
-        this.isFileNotFoundError(error)
-      ) {
-        return false;
-      }
+      wine: {
+        ...profile.wine,
+      },
 
-      throw error;
-    }
-  }
+      graphics: {
+        ...profile.graphics,
 
-  /**
-   * List game directories currently stored by the
-   * compatibility system.
-   */
-  async listGameNames(): Promise<string[]> {
-    const gamesPath =
-      this.paths.getGamesPath();
-
-    try {
-      const entries = await fs.readdir(
-        gamesPath,
-        {
-          withFileTypes: true,
+        environmentVariables: {
+          ...profile.graphics.environmentVariables,
         },
-      );
 
-      return entries
-        .filter((entry) => entry.isDirectory())
-        .map((entry) => entry.name);
-    } catch (error) {
-      if (
-        this.isFileNotFoundError(error)
-      ) {
-        return [];
-      }
+        compatibilityFlags: [
+          ...profile.graphics.compatibilityFlags,
+        ],
+      },
 
-      throw error;
-    }
-  }
+      dependencies: profile.dependencies.map(
+        (dependency) => ({
+          ...dependency,
+        }),
+      ),
 
-  /**
-   * Determine whether an error represents a missing file
-   * or directory.
-   */
-  private isFileNotFoundError(
-    error: unknown,
-  ): boolean {
-    return (
-      error instanceof Error &&
-      "code" in error &&
-      error.code === "ENOENT"
-    );
+      backups: profile.backups.map(
+        (backup) => ({
+          ...backup,
+        }),
+      ),
+
+      lastKnownGoodConfiguration:
+        profile.lastKnownGoodConfiguration
+          ? {
+              ...profile.lastKnownGoodConfiguration,
+
+              wine:
+                profile
+                  .lastKnownGoodConfiguration
+                  .wine
+                  ? {
+                      ...profile
+                        .lastKnownGoodConfiguration
+                        .wine,
+                    }
+                  : undefined,
+
+              graphics:
+                profile
+                  .lastKnownGoodConfiguration
+                  .graphics
+                  ? {
+                      ...profile
+                        .lastKnownGoodConfiguration
+                        .graphics,
+
+                      environmentVariables: {
+                        ...profile
+                          .lastKnownGoodConfiguration
+                          .graphics
+                          .environmentVariables,
+                      },
+
+                      compatibilityFlags: [
+                        ...profile
+                          .lastKnownGoodConfiguration
+                          .graphics
+                          .compatibilityFlags,
+                      ],
+                    }
+                  : undefined,
+
+              dependencies:
+                profile
+                  .lastKnownGoodConfiguration
+                  .dependencies
+                  .map(
+                    (dependency) => ({
+                      ...dependency,
+                    }),
+                  ),
+            }
+          : undefined,
+    };
   }
 }
