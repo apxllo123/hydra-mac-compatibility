@@ -1,72 +1,234 @@
 /**
  * Hydra Mac Compatibility
  *
- * Compatibility test coordinator for Windows games on macOS.
+ * Tests whether a Windows game compatibility configuration
+ * is internally ready to be used.
  *
- * The tester determines whether a compatibility configuration
- * appears usable. It does not permanently modify configuration.
+ * The tester reports results only. It does not repair,
+ * install, or modify compatibility data.
  */
 
 import {
-  CompatibilityTestResult,
   MacGameCompatibilityProfile,
+  CompatibilityTestResult,
 } from "../manager/MacCompatibilityTypes";
 
-import { MacCompatibilityDiagnostics } from "./MacCompatibilityDiagnostics";
-
 export class MacCompatibilityTester {
-  private readonly diagnostics: MacCompatibilityDiagnostics;
-
-  constructor(
-    diagnostics = new MacCompatibilityDiagnostics(),
-  ) {
-    this.diagnostics = diagnostics;
-  }
-
   /**
-   * Run a compatibility test for a game.
+   * Test a game's compatibility configuration.
    *
-   * The current implementation performs a configuration
-   * and diagnostic validation. Actual Wine/game launching
-   * will be connected during Hydra integration.
+   * Runtime launch testing will be connected later.
+   * For now, this performs safe configuration checks.
    */
-  test(
+  async test(
     profile: MacGameCompatibilityProfile,
-  ): CompatibilityTestResult {
-    const diagnosticResult =
-      this.diagnostics.diagnose(
-        profile,
-      );
+  ): Promise<CompatibilityTestResult> {
+    const checks: string[] = [];
+    const failures: string[] = [];
+
+    this.checkGame(
+      profile,
+      checks,
+      failures,
+    );
+
+    this.checkWine(
+      profile,
+      checks,
+      failures,
+    );
+
+    this.checkDependencies(
+      profile,
+      checks,
+      failures,
+    );
+
+    this.checkGraphics(
+      profile,
+      checks,
+      failures,
+    );
 
     const passed =
-      diagnosticResult.healthy;
+      failures.length === 0;
 
     return {
       gameId: profile.gameId,
       passed,
       testedAt:
         new Date().toISOString(),
-      diagnostics:
-        diagnosticResult.diagnostics,
+      checks,
+      failures,
     };
   }
 
   /**
-   * Run a lightweight configuration test.
+   * Check the game configuration.
    */
-  testConfiguration(
+  private checkGame(
     profile: MacGameCompatibilityProfile,
-  ): CompatibilityTestResult {
-    return this.test(profile);
+    checks: string[],
+    failures: string[],
+  ): void {
+    if (
+      profile.gamePath &&
+      profile.gamePath.trim()
+    ) {
+      checks.push(
+        "Game path is configured.",
+      );
+    } else {
+      failures.push(
+        "Game path is not configured.",
+      );
+    }
+
+    if (
+      profile.executable &&
+      profile.executable.trim()
+    ) {
+      checks.push(
+        "Game executable is configured.",
+      );
+    } else {
+      failures.push(
+        "Game executable is not configured.",
+      );
+    }
   }
 
   /**
-   * Determine whether a previous test result indicates
-   * that the game passed.
+   * Check the Wine configuration.
    */
-  didPass(
-    result: CompatibilityTestResult,
-  ): boolean {
-    return result.passed;
+  private checkWine(
+    profile: MacGameCompatibilityProfile,
+    checks: string[],
+    failures: string[],
+  ): void {
+    if (!profile.wine) {
+      failures.push(
+        "Wine is not configured.",
+      );
+
+      return;
+    }
+
+    if (
+      profile.wine.version &&
+      profile.wine.version.trim()
+    ) {
+      checks.push(
+        `Wine version configured: ${profile.wine.version}.`,
+      );
+    } else {
+      failures.push(
+        "Wine version is not configured.",
+      );
+    }
+
+    if (
+      profile.wine.prefixPath &&
+      profile.wine.prefixPath.trim()
+    ) {
+      checks.push(
+        "Wine prefix is configured.",
+      );
+    } else {
+      failures.push(
+        "Wine prefix is not configured.",
+      );
+    }
+  }
+
+  /**
+   * Check dependency configuration.
+   */
+  private checkDependencies(
+    profile: MacGameCompatibilityProfile,
+    checks: string[],
+    failures: string[],
+  ): void {
+    const dependencies =
+      profile.dependencies ?? [];
+
+    if (
+      dependencies.length === 0
+    ) {
+      checks.push(
+        "No additional dependencies are recorded.",
+      );
+
+      return;
+    }
+
+    for (const dependency of dependencies) {
+      if (dependency.installed) {
+        checks.push(
+          `Dependency installed: ${dependency.id}.`,
+        );
+      } else {
+        failures.push(
+          `Dependency missing: ${dependency.id}.`,
+        );
+      }
+    }
+  }
+
+  /**
+   * Check graphics configuration.
+   */
+  private checkGraphics(
+    profile: MacGameCompatibilityProfile,
+    checks: string[],
+    failures: string[],
+  ): void {
+    const graphics =
+      profile.graphics;
+
+    if (
+      graphics.backend &&
+      graphics.backend.trim()
+    ) {
+      checks.push(
+        `Graphics backend configured: ${graphics.backend}.`,
+      );
+    } else {
+      failures.push(
+        "Graphics backend is not configured.",
+      );
+    }
+
+    if (graphics.dxvk.enabled) {
+      if (graphics.dxvk.version) {
+        checks.push(
+          `DXVK configured: ${graphics.dxvk.version}.`,
+        );
+      } else {
+        failures.push(
+          "DXVK is enabled but no version is configured.",
+        );
+      }
+    } else {
+      checks.push(
+        "DXVK is disabled.",
+      );
+    }
+
+    if (graphics.vkd3d.enabled) {
+      if (graphics.vkd3d.version) {
+        checks.push(
+          `VKD3D configured: ${graphics.vkd3d.version}.`,
+        );
+      } else {
+        failures.push(
+          "VKD3D is enabled but no version is configured.",
+        );
+      }
+    } else {
+      checks.push(
+        "VKD3D is disabled.",
+      );
+    }
   }
 }
