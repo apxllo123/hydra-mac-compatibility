@@ -1,14 +1,14 @@
 /**
  * Hydra Mac Compatibility
  *
- * Stores and retrieves Windows game compatibility profiles.
+ * Persistent storage coordinator for game compatibility profiles.
  *
- * The store is intentionally separated from the game profile
- * itself so persistence can later be connected to the storage
- * subsystem without changing the rest of the compatibility code.
+ * The store owns profile persistence.
+ * It does not perform Wine, dependency, graphics, diagnostic,
+ * or repair operations.
  */
 
-import {
+import type {
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
@@ -21,51 +21,38 @@ export class MacGameProfileStore {
   >();
 
   /**
-   * Create and store a new game profile.
+   * Add a new game profile.
+   *
+   * Throws when a profile with the same game ID already exists.
    */
-  create(
-    profile: MacGameCompatibilityProfile,
-  ): MacGameProfile {
-    if (
-      this.profiles.has(
-        profile.gameId,
-      )
-    ) {
+  add(
+    profile: MacGameProfile,
+  ): void {
+    const gameId =
+      profile.getGameId();
+
+    if (this.profiles.has(gameId)) {
       throw new Error(
-        `A game profile already exists for "${profile.gameId}".`,
+        `A game profile already exists for "${gameId}".`,
       );
     }
 
-    const gameProfile =
-      new MacGameProfile(
-        profile,
-      );
-
     this.profiles.set(
-      profile.gameId,
-      gameProfile,
+      gameId,
+      profile,
     );
-
-    return gameProfile;
   }
 
   /**
-   * Add or replace an existing profile.
+   * Add or replace a game profile.
    */
   upsert(
-    profile: MacGameCompatibilityProfile,
-  ): MacGameProfile {
-    const gameProfile =
-      new MacGameProfile(
-        profile,
-      );
-
+    profile: MacGameProfile,
+  ): void {
     this.profiles.set(
-      profile.gameId,
-      gameProfile,
+      profile.getGameId(),
+      profile,
     );
-
-    return gameProfile;
   }
 
   /**
@@ -80,7 +67,7 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Check whether a profile exists.
+   * Check whether a game profile exists.
    */
   has(
     gameId: string,
@@ -94,7 +81,7 @@ export class MacGameProfileStore {
    * Remove a profile from the store.
    *
    * This only removes the in-memory profile.
-   * It does not delete game files.
+   * It does NOT delete files from disk.
    */
   remove(
     gameId: string,
@@ -105,7 +92,7 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Return every stored game profile.
+   * Return every stored profile.
    */
   getAll(): MacGameProfile[] {
     return Array.from(
@@ -142,9 +129,36 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Export all profiles as plain compatibility objects.
+   * Find profiles by compatibility status.
+   */
+  findByStatus(
+    status: MacGameCompatibilityProfile["status"],
+  ): MacGameProfile[] {
+    return this.getAll().filter(
+      (profile) =>
+        profile.getStatus() ===
+        status,
+    );
+  }
+
+  /**
+   * Export one profile as a plain object.
    *
-   * This is useful for the storage subsystem.
+   * This is the format the storage subsystem can serialize
+   * to compatibility.json.
+   */
+  export(
+    gameId: string,
+  ):
+    | MacGameCompatibilityProfile
+    | undefined {
+    return this.profiles
+      .get(gameId)
+      ?.getProfile();
+  }
+
+  /**
+   * Export every stored profile.
    */
   exportAll(): MacGameCompatibilityProfile[] {
     return this.getAll().map(
@@ -154,9 +168,81 @@ export class MacGameProfileStore {
   }
 
   /**
-   * Clear every stored profile.
+   * Import a plain compatibility profile.
    *
-   * This does not delete files from disk.
+   * This is intended for loading compatibility.json data.
+   */
+  import(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameProfile {
+    const gameProfile =
+      new MacGameProfile({
+        gameId:
+          profile.gameId,
+
+        gameName:
+          profile.gameName,
+
+        gamePath:
+          profile.gamePath,
+
+        compatibilityPath:
+          profile.compatibilityPath,
+
+        wine:
+          profile.wine,
+
+        graphics:
+          profile.graphics,
+
+        dependencies:
+          profile.dependencies,
+
+        status:
+          profile.status,
+
+        backups:
+          profile.backups,
+
+        lastKnownGoodConfiguration:
+          profile.lastKnownGoodConfiguration,
+
+        notes:
+          profile.notes,
+      });
+
+    gameProfile.setLastTested(
+      profile.lastTested ??
+        "",
+    );
+
+    if (
+      profile.lastDiagnosed
+    ) {
+      gameProfile.setLastDiagnosed(
+        profile.lastDiagnosed,
+      );
+    }
+
+    if (
+      profile.lastRepaired
+    ) {
+      gameProfile.setLastRepaired(
+        profile.lastRepaired,
+      );
+    }
+
+    this.upsert(
+      gameProfile,
+    );
+
+    return gameProfile;
+  }
+
+  /**
+   * Remove every in-memory profile.
+   *
+   * This does NOT delete persisted files.
    */
   clear(): void {
     this.profiles.clear();
