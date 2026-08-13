@@ -1,324 +1,74 @@
 /**
  * Hydra Mac Compatibility
  *
- * Detects Wine-related executables and installations available
- * on the current macOS system.
+ * Detects Wine installations available on macOS.
  *
  * IMPORTANT:
- * This module only detects.
- * It does not install, modify, or remove Wine.
+ * This class is intentionally conservative.
+ *
+ * Detection identifies Wine installations that already exist.
+ * It does not install Wine, modify Wine installations,
+ * or create game prefixes.
+ *
+ * Installation and environment setup will be handled by
+ * separate systems later.
  */
 
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { access } from "node:fs/promises";
-
-const execFileAsync = promisify(
-  execFile,
-);
-
-export interface WineInstallation {
-  /**
-   * Executable used to launch Wine.
-   */
-  executablePath: string;
-
-  /**
-   * Detected Wine version.
-   */
-  version?: string;
-
-  /**
-   * How this Wine installation was discovered.
-   */
-  source:
-    | "path"
-    | "homebrew"
-    | "known-location"
-    | "unknown";
-}
-
-export interface WineDetectionResult {
-  /**
-   * Whether Wine was detected.
-   */
-  available: boolean;
-
-  /**
-   * Detected Wine installations.
-   */
-  installations: WineInstallation[];
-
-  /**
-   * Whether the host appears to be macOS.
-   */
-  isMacOS: boolean;
-
-  /**
-   * Human-readable detection messages.
-   */
-  messages: string[];
-}
+import {
+  MacWineInstallation,
+} from "../manager/MacCompatibilityTypes";
 
 export class MacWineDetector {
   /**
-   * Detect Wine installations available on the Mac.
+   * Detect Wine installations available on the system.
+   *
+   * The actual macOS filesystem/process detection will be
+   * connected during Hydra integration.
+   *
+   * Returning an empty array is intentional for now rather
+   * than pretending that Wine exists.
    */
-  async detect(): Promise<WineDetectionResult> {
-    const isMacOS =
-      process.platform === "darwin";
+  detect(): MacWineInstallation[] {
+    return [];
+  }
 
-    if (!isMacOS) {
-      return {
-        available: false,
-        installations: [],
-        isMacOS: false,
-        messages: [
-          "Wine detection is currently intended for macOS.",
-        ],
-      };
-    }
+  /**
+   * Check whether at least one Wine installation is available.
+   */
+  isWineAvailable(): boolean {
+    return this.detect().length > 0;
+  }
 
-    const installations: WineInstallation[] = [];
-    const messages: string[] = [];
-
-    await this.detectFromPath(
-      installations,
-      messages,
+  /**
+   * Find a Wine installation by its stable identifier.
+   */
+  findById(
+    installationId: string,
+  ): MacWineInstallation | undefined {
+    return this.detect().find(
+      (installation) =>
+        installation.id === installationId,
     );
+  }
 
-    await this.detectHomebrew(
-      installations,
-      messages,
+  /**
+   * Find Wine installations matching a version.
+   */
+  findByVersion(
+    version: string,
+  ): MacWineInstallation[] {
+    return this.detect().filter(
+      (installation) =>
+        installation.version === version,
     );
-
-    await this.detectKnownLocations(
-      installations,
-      messages,
-    );
-
-    const uniqueInstallations =
-      this.removeDuplicates(
-        installations,
-      );
-
-    return {
-      available:
-        uniqueInstallations.length > 0,
-      installations:
-        uniqueInstallations,
-      isMacOS: true,
-      messages,
-    };
   }
 
   /**
-   * Check whether a specific executable exists.
+   * Return the first available Wine installation.
    */
-  async isExecutableAvailable(
-    executablePath: string,
-  ): Promise<boolean> {
-    try {
-      await access(
-        executablePath,
-      );
-
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Detect Wine available through PATH.
-   */
-  private async detectFromPath(
-    installations: WineInstallation[],
-    messages: string[],
-  ): Promise<void> {
-    try {
-      const { stdout } =
-        await execFileAsync(
-          "which",
-          ["wine"],
-        );
-
-      const executablePath =
-        stdout.trim();
-
-      if (!executablePath) {
-        return;
-      }
-
-      const version =
-        await this.getWineVersion(
-          executablePath,
-        );
-
-      installations.push({
-        executablePath,
-        version,
-        source: "path",
-      });
-
-      messages.push(
-        `Wine detected through PATH: ${executablePath}`,
-      );
-    } catch {
-      messages.push(
-        "Wine was not found through PATH.",
-      );
-    }
-  }
-
-  /**
-   * Detect Wine installations managed through Homebrew.
-   */
-  private async detectHomebrew(
-    installations: WineInstallation[],
-    messages: string[],
-  ): Promise<void> {
-    try {
-      const { stdout } =
-        await execFileAsync(
-          "brew",
-          ["--prefix", "wine"],
-        );
-
-      const prefix =
-        stdout.trim();
-
-      if (!prefix) {
-        return;
-      }
-
-      const executablePath =
-        `${prefix}/bin/wine`;
-
-      if (
-        !(await this.isExecutableAvailable(
-          executablePath,
-        ))
-      ) {
-        return;
-      }
-
-      const version =
-        await this.getWineVersion(
-          executablePath,
-        );
-
-      installations.push({
-        executablePath,
-        version,
-        source: "homebrew",
-      });
-
-      messages.push(
-        `Wine detected through Homebrew: ${executablePath}`,
-      );
-    } catch {
-      messages.push(
-        "No Homebrew Wine installation was detected.",
-      );
-    }
-  }
-
-  /**
-   * Detect Wine in common locations.
-   */
-  private async detectKnownLocations(
-    installations: WineInstallation[],
-    messages: string[],
-  ): Promise<void> {
-    const homeDirectory =
-      process.env.HOME;
-
-    if (!homeDirectory) {
-      return;
-    }
-
-    const knownLocations = [
-      `${homeDirectory}/.wine/bin/wine`,
-      "/usr/local/bin/wine",
-      "/opt/homebrew/bin/wine",
-    ];
-
-    for (
-      const executablePath of knownLocations
-    ) {
-      if (
-        !(await this.isExecutableAvailable(
-          executablePath,
-        ))
-      ) {
-        continue;
-      }
-
-      const version =
-        await this.getWineVersion(
-          executablePath,
-        );
-
-      installations.push({
-        executablePath,
-        version,
-        source: "known-location",
-      });
-
-      messages.push(
-        `Wine detected at known location: ${executablePath}`,
-      );
-    }
-  }
-
-  /**
-   * Ask a Wine executable for its version.
-   */
-  private async getWineVersion(
-    executablePath: string,
-  ): Promise<string | undefined> {
-    try {
-      const { stdout, stderr } =
-        await execFileAsync(
-          executablePath,
-          ["--version"],
-        );
-
-      const output =
-        `${stdout}\n${stderr}`.trim();
-
-      return output || undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  /**
-   * Remove duplicate executable paths.
-   */
-  private removeDuplicates(
-    installations: WineInstallation[],
-  ): WineInstallation[] {
-    const seen =
-      new Set<string>();
-
-    return installations.filter(
-      (installation) => {
-        if (
-          seen.has(
-            installation.executablePath,
-          )
-        ) {
-          return false;
-        }
-
-        seen.add(
-          installation.executablePath,
-        );
-
-        return true;
-      },
-    );
+  getDefaultInstallation():
+    | MacWineInstallation
+    | undefined {
+    return this.detect()[0];
   }
 }
