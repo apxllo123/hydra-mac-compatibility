@@ -1,191 +1,125 @@
 /**
  * Hydra Mac Compatibility
  *
- * Coordinates detected Wine installations and determines
- * which Wine installation should be used by a game.
+ * Central coordinator for Wine-related compatibility operations.
  *
- * This class does not install or remove Wine.
- * Installation and version management belong to the
- * Wine version manager.
+ * This class does not implement low-level Wine detection or
+ * version management itself. Those responsibilities belong to:
+ *
+ * - MacWineDetector
+ * - MacWineVersionManager
+ *
+ * MacWineManager coordinates those systems and provides a
+ * clean interface for the rest of the compatibility system.
  */
 
 import {
-  MacWineDetector,
-  WineDetectionResult,
-  WineInstallation,
-} from "./MacWineDetector";
+  MacWineConfiguration,
+  MacWineInstallation,
+  MacWineVersion,
+} from "../manager/MacCompatibilityTypes";
 
-export interface WineSelectionOptions {
-  /**
-   * Prefer a specific Wine executable.
-   */
-  executablePath?: string;
-
-  /**
-   * Prefer a specific Wine version.
-   */
-  version?: string;
-}
+import { MacWineDetector } from "./MacWineDetector";
+import { MacWineVersionManager } from "./MacWineVersionManager";
 
 export class MacWineManager {
   private readonly detector: MacWineDetector;
-
-  private detectionResult?: WineDetectionResult;
-
-  private selectedWine?: WineInstallation;
+  private readonly versionManager: MacWineVersionManager;
 
   constructor(
     detector: MacWineDetector = new MacWineDetector(),
+    versionManager: MacWineVersionManager = new MacWineVersionManager(),
   ) {
     this.detector = detector;
+    this.versionManager = versionManager;
   }
 
   /**
-   * Detect available Wine installations.
+   * Detect Wine installations available on the Mac.
    */
-  async refresh(): Promise<WineDetectionResult> {
-    this.detectionResult =
-      await this.detector.detect();
-
-    this.selectDefaultWine();
-
-    return this.detectionResult;
+  detectInstallations(): MacWineInstallation[] {
+    return this.detector.detect();
   }
 
   /**
-   * Return the most recent Wine detection result.
-   *
-   * If detection has not happened yet, returns undefined.
-   */
-  getDetectionResult():
-    | WineDetectionResult
-    | undefined {
-    return this.detectionResult;
-  }
-
-  /**
-   * Return all detected Wine installations.
-   */
-  getInstallations(): WineInstallation[] {
-    return [
-      ...(this.detectionResult?.installations ?? []),
-    ];
-  }
-
-  /**
-   * Return the currently selected Wine installation.
-   */
-  getSelectedWine():
-    | WineInstallation
-    | undefined {
-    return this.selectedWine;
-  }
-
-  /**
-   * Select a Wine installation explicitly.
-   */
-  selectWine(
-    options: WineSelectionOptions,
-  ): WineInstallation {
-    const installations =
-      this.getInstallations();
-
-    if (installations.length === 0) {
-      throw new Error(
-        "No Wine installations have been detected.",
-      );
-    }
-
-    let selected:
-      | WineInstallation
-      | undefined;
-
-    if (options.executablePath) {
-      selected =
-        installations.find(
-          (installation) =>
-            installation.executablePath ===
-            options.executablePath,
-        );
-    }
-
-    if (
-      !selected &&
-      options.version
-    ) {
-      selected =
-        installations.find(
-          (installation) =>
-            installation.version ===
-            options.version,
-        );
-    }
-
-    if (!selected) {
-      throw new Error(
-        "No Wine installation matched the requested selection.",
-      );
-    }
-
-    this.selectedWine =
-      selected;
-
-    return selected;
-  }
-
-  /**
-   * Determine whether Wine is available.
+   * Check whether Wine is available.
    */
   isWineAvailable(): boolean {
-    return (
-      this.detectionResult?.available ??
-      false
-    );
+    return this.detector.isWineAvailable();
   }
 
   /**
-   * Determine whether a specific Wine executable
-   * has been detected.
+   * Return all known Wine versions.
    */
-  hasExecutable(
-    executablePath: string,
+  getAvailableVersions(): MacWineVersion[] {
+    return this.versionManager.getAvailableVersions();
+  }
+
+  /**
+   * Return the currently selected Wine version.
+   */
+  getSelectedVersion(): MacWineVersion | undefined {
+    return this.versionManager.getSelectedVersion();
+  }
+
+  /**
+   * Select a Wine version for compatibility operations.
+   */
+  selectVersion(versionId: string): MacWineVersion {
+    return this.versionManager.selectVersion(versionId);
+  }
+
+  /**
+   * Clear the currently selected Wine version.
+   */
+  clearSelectedVersion(): void {
+    this.versionManager.clearSelectedVersion();
+  }
+
+  /**
+   * Validate a Wine configuration.
+   */
+  validateConfiguration(
+    configuration: MacWineConfiguration,
   ): boolean {
-    return this.getInstallations().some(
-      (installation) =>
-        installation.executablePath ===
-        executablePath,
-    );
-  }
-
-  /**
-   * Select the first suitable Wine installation
-   * when no explicit selection has been made.
-   */
-  private selectDefaultWine(): void {
-    const installations =
-      this.getInstallations();
-
-    if (installations.length === 0) {
-      this.selectedWine =
-        undefined;
-
-      return;
+    if (!configuration.version) {
+      return false;
     }
 
-    /*
-     * Prefer installations discovered through PATH
-     * because the operating system already knows how
-     * to resolve them.
-     */
-    const pathInstallation =
-      installations.find(
-        (installation) =>
-          installation.source ===
-          "path",
-      );
+    if (!configuration.prefixPath) {
+      return false;
+    }
 
-    this.selectedWine =
-      pathInstallation ??
-      installations[0];
+    return true;
+  }
+
+  /**
+   * Create a basic Wine configuration for a game.
+   *
+   * This does not create the prefix on disk.
+   * Actual prefix creation belongs to the Wine execution layer.
+   */
+  createConfiguration(
+    version: MacWineVersion,
+    prefixPath: string,
+  ): MacWineConfiguration {
+    return {
+      version,
+      prefixPath,
+    };
+  }
+
+  /**
+   * Check whether a Wine version can be used.
+   */
+  canUseVersion(versionId: string): boolean {
+    return this.versionManager.hasVersion(versionId);
+  }
+
+  /**
+   * Refresh detected Wine installations.
+   */
+  refresh(): MacWineInstallation[] {
+    return this.detector.detect();
   }
 }
