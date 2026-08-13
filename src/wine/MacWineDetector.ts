@@ -1,10 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Detects Wine installations available to Hydra on macOS.
+ * Detects Wine installations available on macOS.
  *
- * Detection is read-only.
- * It does not install, remove, or modify Wine.
+ * Detection is read-only. This class does not install,
+ * remove, or modify Wine.
  */
 
 import {
@@ -13,10 +13,10 @@ import {
 
 export class MacWineDetector {
   /**
-   * Detect available Wine installations.
+   * Detect Wine installations available to Hydra.
    *
-   * Real macOS filesystem/process detection will be connected
-   * during Hydra integration.
+   * The actual macOS filesystem/process detection will be
+   * connected when the Wine runtime layer is implemented.
    */
   detect(): MacWineInstallation[] {
     return [];
@@ -42,36 +42,40 @@ export class MacWineDetector {
     installations: MacWineInstallation[],
     version: string,
   ): MacWineInstallation | undefined {
+    const normalizedVersion =
+      version.trim().toLowerCase();
+
     return installations.find(
       (installation) =>
-        installation.version === version,
+        installation.version
+          .trim()
+          .toLowerCase() ===
+        normalizedVersion,
     );
   }
 
   /**
-   * Determine whether a specific Wine version exists.
+   * Determine whether a Wine installation is usable.
    */
-  hasVersion(
-    installations: MacWineInstallation[],
-    version: string,
+  isUsable(
+    installation: MacWineInstallation,
   ): boolean {
-    return installations.some(
-      (installation) =>
-        installation.version === version,
+    return (
+      installation.available &&
+      installation.executablePath.trim()
+        .length > 0
     );
   }
 
   /**
-   * Return Wine installations that are currently marked
-   * as usable.
+   * Return only usable Wine installations.
    */
   getUsable(
     installations: MacWineInstallation[],
   ): MacWineInstallation[] {
     return installations.filter(
       (installation) =>
-        installation.available &&
-        installation.working,
+        this.isUsable(installation),
     );
   }
 }
