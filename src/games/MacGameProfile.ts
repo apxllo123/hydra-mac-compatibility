@@ -1,16 +1,15 @@
 /**
  * Hydra Mac Compatibility
  *
- * Runtime representation of a single Windows game's
- * compatibility profile.
+ * Represents one Windows game's compatibility profile.
  *
- * One instance represents one game.
- * Game-specific configuration must remain isolated.
+ * A profile is the central per-game record containing the
+ * configuration Hydra needs to remember what worked.
  */
 
 import {
-  MacGameCompatibilityProfile,
   CompatibilityStatus,
+  MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
 export class MacGameProfile {
@@ -19,18 +18,14 @@ export class MacGameProfile {
   constructor(
     profile: MacGameCompatibilityProfile,
   ) {
-    this.profile = this.cloneProfile(
-      profile,
-    );
+    this.profile = this.clone(profile);
   }
 
   /**
-   * Return the complete compatibility profile.
+   * Return the complete game compatibility profile.
    */
   getProfile(): MacGameCompatibilityProfile {
-    return this.cloneProfile(
-      this.profile,
-    );
+    return this.clone(this.profile);
   }
 
   /**
@@ -41,7 +36,7 @@ export class MacGameProfile {
   }
 
   /**
-   * Return the human-readable game name.
+   * Return the game's human-readable name.
    */
   getGameName(): string {
     return this.profile.gameName;
@@ -60,12 +55,18 @@ export class MacGameProfile {
   setStatus(
     status: CompatibilityStatus,
   ): void {
-    this.profile.status =
-      status;
+    this.profile.status = status;
   }
 
   /**
-   * Update the game installation path.
+   * Return the installed game path.
+   */
+  getGamePath(): string {
+    return this.profile.gamePath;
+  }
+
+  /**
+   * Update the installed game path.
    */
   setGamePath(
     gamePath: string,
@@ -75,29 +76,47 @@ export class MacGameProfile {
   }
 
   /**
-   * Update the game's Wine configuration.
+   * Return the configured Wine information.
    */
-  setWineConfiguration(
-    wine: MacGameCompatibilityProfile["wine"],
-  ): void {
-    this.profile.wine = {
-      ...wine,
-    };
+  getWine() {
+    return this.profile.wine;
   }
 
   /**
-   * Update the game's graphics configuration.
+   * Update the Wine configuration.
    */
-  setGraphicsConfiguration(
+  setWine(
+    wine: MacGameCompatibilityProfile["wine"],
+  ): void {
+    this.profile.wine = wine
+      ? { ...wine }
+      : undefined;
+  }
+
+  /**
+   * Return the graphics configuration.
+   */
+  getGraphics() {
+    return this.profile.graphics;
+  }
+
+  /**
+   * Update the graphics configuration.
+   */
+  setGraphics(
     graphics: MacGameCompatibilityProfile["graphics"],
   ): void {
     this.profile.graphics = {
       ...graphics,
-
+      dxvk: {
+        ...graphics.dxvk,
+      },
+      vkd3d: {
+        ...graphics.vkd3d,
+      },
       environmentVariables: {
         ...graphics.environmentVariables,
       },
-
       compatibilityFlags: [
         ...graphics.compatibilityFlags,
       ],
@@ -105,21 +124,24 @@ export class MacGameProfile {
   }
 
   /**
-   * Update the dependency list.
+   * Return a copy of the dependency list.
    */
-  setDependencies(
-    dependencies: MacGameCompatibilityProfile["dependencies"],
-  ): void {
-    this.profile.dependencies =
-      dependencies.map(
-        (dependency) => ({
-          ...dependency,
-        }),
-      );
+  getDependencies() {
+    return (this.profile.dependencies ?? [])
+      .map((dependency) => ({
+        ...dependency,
+      }));
   }
 
   /**
-   * Record the time a compatibility test was run.
+   * Return the timestamp of the last compatibility test.
+   */
+  getLastTested(): string | undefined {
+    return this.profile.lastTested;
+  }
+
+  /**
+   * Update the last-tested timestamp.
    */
   setLastTested(
     timestamp: string,
@@ -129,58 +151,19 @@ export class MacGameProfile {
   }
 
   /**
-   * Store the current configuration as the
-   * last known good configuration.
+   * Replace the entire profile.
    */
-  saveKnownGoodConfiguration(): void {
-    this.profile.lastKnownGoodConfiguration =
-      this.cloneProfile(
-        this.profile,
-      );
-  }
-
-  /**
-   * Return the last known good configuration.
-   */
-  getKnownGoodConfiguration():
-    | MacGameCompatibilityProfile
-    | undefined {
-    if (
-      !this.profile.lastKnownGoodConfiguration
-    ) {
-      return undefined;
-    }
-
-    return this.cloneProfile(
-      this.profile.lastKnownGoodConfiguration,
-    );
-  }
-
-  /**
-   * Replace the current profile.
-   */
-  updateProfile(
+  replace(
     profile: MacGameCompatibilityProfile,
   ): void {
-    if (
-      profile.gameId !==
-      this.profile.gameId
-    ) {
-      throw new Error(
-        "A game profile cannot be replaced with a different game.",
-      );
-    }
-
     this.profile =
-      this.cloneProfile(
-        profile,
-      );
+      this.clone(profile);
   }
 
   /**
-   * Create a safe copy of a profile.
+   * Create a safe copy of the profile.
    */
-  private cloneProfile(
+  private clone(
     profile: MacGameCompatibilityProfile,
   ): MacGameCompatibilityProfile {
     return {
@@ -190,36 +173,41 @@ export class MacGameProfile {
         ? {
             ...profile.wine,
           }
-        : profile.wine,
+        : undefined,
 
-      graphics: profile.graphics
-        ? {
-            ...profile.graphics,
+      graphics: {
+        ...profile.graphics,
 
-            environmentVariables: {
-              ...profile.graphics
-                .environmentVariables,
-            },
+        dxvk: {
+          ...profile.graphics.dxvk,
+        },
 
-            compatibilityFlags: [
-              ...profile.graphics
-                .compatibilityFlags,
-            ],
-          }
-        : profile.graphics,
+        vkd3d: {
+          ...profile.graphics.vkd3d,
+        },
 
-      dependencies:
-        profile.dependencies?.map(
-          (dependency) => ({
-            ...dependency,
-          }),
-        ),
+        environmentVariables: {
+          ...profile.graphics
+            .environmentVariables,
+        },
+
+        compatibilityFlags: [
+          ...profile.graphics
+            .compatibilityFlags,
+        ],
+      },
+
+      dependencies: (
+        profile.dependencies ?? []
+      ).map((dependency) => ({
+        ...dependency,
+      })),
 
       lastKnownGoodConfiguration:
         profile.lastKnownGoodConfiguration
-          ? this.cloneProfile(
-              profile.lastKnownGoodConfiguration,
-            )
+          ? {
+              ...profile.lastKnownGoodConfiguration,
+            }
           : undefined,
     };
   }
