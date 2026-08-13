@@ -1,17 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Detects Wine installations available on macOS.
+ * Detects Wine installations available to Hydra on macOS.
  *
- * IMPORTANT:
- * This class is intentionally conservative.
- *
- * Detection identifies Wine installations that already exist.
- * It does not install Wine, modify Wine installations,
- * or create game prefixes.
- *
- * Installation and environment setup will be handled by
- * separate systems later.
+ * Detection is read-only.
+ * It does not install, remove, or modify Wine.
  */
 
 import {
@@ -20,55 +13,65 @@ import {
 
 export class MacWineDetector {
   /**
-   * Detect Wine installations available on the system.
+   * Detect available Wine installations.
    *
-   * The actual macOS filesystem/process detection will be
-   * connected during Hydra integration.
-   *
-   * Returning an empty array is intentional for now rather
-   * than pretending that Wine exists.
+   * Real macOS filesystem/process detection will be connected
+   * during Hydra integration.
    */
   detect(): MacWineInstallation[] {
     return [];
   }
 
   /**
-   * Check whether at least one Wine installation is available.
-   */
-  isWineAvailable(): boolean {
-    return this.detect().length > 0;
-  }
-
-  /**
    * Find a Wine installation by its stable identifier.
    */
   findById(
-    installationId: string,
+    installations: MacWineInstallation[],
+    wineId: string,
   ): MacWineInstallation | undefined {
-    return this.detect().find(
+    return installations.find(
       (installation) =>
-        installation.id === installationId,
+        installation.id === wineId,
     );
   }
 
   /**
-   * Find Wine installations matching a version.
+   * Find a Wine installation by version.
    */
   findByVersion(
+    installations: MacWineInstallation[],
     version: string,
-  ): MacWineInstallation[] {
-    return this.detect().filter(
+  ): MacWineInstallation | undefined {
+    return installations.find(
       (installation) =>
         installation.version === version,
     );
   }
 
   /**
-   * Return the first available Wine installation.
+   * Determine whether a specific Wine version exists.
    */
-  getDefaultInstallation():
-    | MacWineInstallation
-    | undefined {
-    return this.detect()[0];
+  hasVersion(
+    installations: MacWineInstallation[],
+    version: string,
+  ): boolean {
+    return installations.some(
+      (installation) =>
+        installation.version === version,
+    );
+  }
+
+  /**
+   * Return Wine installations that are currently marked
+   * as usable.
+   */
+  getUsable(
+    installations: MacWineInstallation[],
+  ): MacWineInstallation[] {
+    return installations.filter(
+      (installation) =>
+        installation.available &&
+        installation.working,
+    );
   }
 }
