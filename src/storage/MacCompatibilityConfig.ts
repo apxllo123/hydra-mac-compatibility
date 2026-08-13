@@ -1,231 +1,177 @@
 /**
  * Hydra Mac Compatibility
  *
- * Configuration for the Windows Compatibility system.
+ * Global configuration for the Windows Compatibility system.
  *
- * This file defines system-wide compatibility preferences.
- * Game-specific settings belong in the individual game profile.
+ * This file defines configuration values for the compatibility
+ * environment without containing game-specific compatibility data.
+ *
+ * Game-specific settings belong in each game's compatibility profile.
  */
-
-import type { GraphicsBackend } from "../manager/MacCompatibilityTypes";
 
 export interface MacCompatibilityConfigOptions {
   /**
-   * Root directory used for compatibility data.
+   * Root directory used by the compatibility system.
    */
-  rootPath: string;
+  compatibilityRoot: string;
 
   /**
-   * Preferred graphics backend.
+   * Whether compatibility logging is enabled.
    */
-  defaultGraphicsBackend?: GraphicsBackend;
+  loggingEnabled?: boolean;
 
   /**
-   * Whether DXVK should be enabled by default.
+   * Minimum logging level.
    */
-  defaultDxvkEnabled?: boolean;
+  logLevel?: "debug" | "info" | "warning" | "error";
 
   /**
-   * Whether VKD3D should be enabled by default.
+   * Whether automatic backups are enabled before changes.
    */
-  defaultVkd3dEnabled?: boolean;
+  automaticBackupsEnabled?: boolean;
 
   /**
-   * Whether automatic diagnostics are enabled.
+   * Whether automatic repair is allowed.
+   *
+   * This should remain disabled unless explicitly enabled.
    */
-  automaticDiagnostics?: boolean;
+  automaticRepairEnabled?: boolean;
 
   /**
-   * Whether Hydra should automatically save known-good
-   * configurations after successful tests.
+   * Whether compatibility testing should be performed
+   * after important configuration changes.
    */
-  automaticBackups?: boolean;
-
-  /**
-   * Maximum number of game configuration backups
-   * retained per game.
-   */
-  maximumBackupsPerGame?: number;
+  testAfterChanges?: boolean;
 }
 
-/**
- * System-wide configuration for Hydra Mac Compatibility.
- */
-export interface MacCompatibilityConfigData {
-  rootPath: string;
-
-  defaultGraphicsBackend: GraphicsBackend;
-
-  defaultDxvkEnabled: boolean;
-
-  defaultVkd3dEnabled: boolean;
-
-  automaticDiagnostics: boolean;
-
-  automaticBackups: boolean;
-
-  maximumBackupsPerGame: number;
-}
-
-const DEFAULT_CONFIG: Omit<
-  MacCompatibilityConfigData,
-  "rootPath"
-> = {
-  defaultGraphicsBackend: "auto",
-  defaultDxvkEnabled: true,
-  defaultVkd3dEnabled: true,
-  automaticDiagnostics: true,
-  automaticBackups: true,
-  maximumBackupsPerGame: 5,
-};
-
-/**
- * Stores and manages compatibility configuration.
- *
- * This class currently manages configuration in memory.
- * Persistent configuration storage will be added later.
- */
 export class MacCompatibilityConfig {
-  private config: MacCompatibilityConfigData;
+  private readonly compatibilityRoot: string;
+
+  private loggingEnabled: boolean;
+  private logLevel: "debug" | "info" | "warning" | "error";
+  private automaticBackupsEnabled: boolean;
+  private automaticRepairEnabled: boolean;
+  private testAfterChanges: boolean;
 
   constructor(options: MacCompatibilityConfigOptions) {
-    this.config = {
-      rootPath: options.rootPath,
+    if (!options.compatibilityRoot.trim()) {
+      throw new Error(
+        "Compatibility root path cannot be empty.",
+      );
+    }
 
-      defaultGraphicsBackend:
-        options.defaultGraphicsBackend ??
-        DEFAULT_CONFIG.defaultGraphicsBackend,
+    this.compatibilityRoot = options.compatibilityRoot;
 
-      defaultDxvkEnabled:
-        options.defaultDxvkEnabled ??
-        DEFAULT_CONFIG.defaultDxvkEnabled,
+    this.loggingEnabled = options.loggingEnabled ?? true;
 
-      defaultVkd3dEnabled:
-        options.defaultVkd3dEnabled ??
-        DEFAULT_CONFIG.defaultVkd3dEnabled,
+    this.logLevel = options.logLevel ?? "info";
 
-      automaticDiagnostics:
-        options.automaticDiagnostics ??
-        DEFAULT_CONFIG.automaticDiagnostics,
+    this.automaticBackupsEnabled =
+      options.automaticBackupsEnabled ?? true;
 
-      automaticBackups:
-        options.automaticBackups ??
-        DEFAULT_CONFIG.automaticBackups,
+    this.automaticRepairEnabled =
+      options.automaticRepairEnabled ?? false;
 
-      maximumBackupsPerGame:
-        options.maximumBackupsPerGame ??
-        DEFAULT_CONFIG.maximumBackupsPerGame,
-    };
+    this.testAfterChanges =
+      options.testAfterChanges ?? true;
   }
 
   /**
-   * Return the complete configuration.
+   * Return the root compatibility directory.
    */
-  get(): MacCompatibilityConfigData {
-    return { ...this.config };
+  getCompatibilityRoot(): string {
+    return this.compatibilityRoot;
   }
 
   /**
-   * Get the compatibility data root path.
+   * Check whether logging is enabled.
    */
-  getRootPath(): string {
-    return this.config.rootPath;
+  isLoggingEnabled(): boolean {
+    return this.loggingEnabled;
   }
 
   /**
-   * Get the default graphics backend.
+   * Enable or disable compatibility logging.
    */
-  getDefaultGraphicsBackend(): GraphicsBackend {
-    return this.config.defaultGraphicsBackend;
+  setLoggingEnabled(enabled: boolean): void {
+    this.loggingEnabled = enabled;
   }
 
   /**
-   * Check whether DXVK is enabled by default.
+   * Return the configured logging level.
    */
-  isDxvkEnabledByDefault(): boolean {
-    return this.config.defaultDxvkEnabled;
+  getLogLevel(): "debug" | "info" | "warning" | "error" {
+    return this.logLevel;
   }
 
   /**
-   * Check whether VKD3D is enabled by default.
+   * Change the logging level.
    */
-  isVkd3dEnabledByDefault(): boolean {
-    return this.config.defaultVkd3dEnabled;
-  }
-
-  /**
-   * Check whether automatic diagnostics are enabled.
-   */
-  areAutomaticDiagnosticsEnabled(): boolean {
-    return this.config.automaticDiagnostics;
+  setLogLevel(
+    level: "debug" | "info" | "warning" | "error",
+  ): void {
+    this.logLevel = level;
   }
 
   /**
    * Check whether automatic backups are enabled.
    */
-  areAutomaticBackupsEnabled(): boolean {
-    return this.config.automaticBackups;
+  isAutomaticBackupsEnabled(): boolean {
+    return this.automaticBackupsEnabled;
   }
 
   /**
-   * Get the maximum number of backups retained per game.
+   * Enable or disable automatic backups.
    */
-  getMaximumBackupsPerGame(): number {
-    return this.config.maximumBackupsPerGame;
+  setAutomaticBackupsEnabled(enabled: boolean): void {
+    this.automaticBackupsEnabled = enabled;
   }
 
   /**
-   * Update configuration values.
+   * Check whether automatic repair is enabled.
+   */
+  isAutomaticRepairEnabled(): boolean {
+    return this.automaticRepairEnabled;
+  }
+
+  /**
+   * Enable or disable automatic repair.
+   */
+  setAutomaticRepairEnabled(enabled: boolean): void {
+    this.automaticRepairEnabled = enabled;
+  }
+
+  /**
+   * Check whether compatibility tests should run after
+   * important configuration changes.
+   */
+  shouldTestAfterChanges(): boolean {
+    return this.testAfterChanges;
+  }
+
+  /**
+   * Enable or disable automatic post-change testing.
+   */
+  setTestAfterChanges(enabled: boolean): void {
+    this.testAfterChanges = enabled;
+  }
+
+  /**
+   * Return a serializable representation of the configuration.
    *
-   * Only supplied properties are changed.
+   * This is intentionally limited to global configuration.
+   * Game profiles are stored separately.
    */
-  update(
-    options: Partial<MacCompatibilityConfigOptions>,
-  ): void {
-    if (options.rootPath !== undefined) {
-      this.config.rootPath = options.rootPath;
-    }
-
-    if (options.defaultGraphicsBackend !== undefined) {
-      this.config.defaultGraphicsBackend =
-        options.defaultGraphicsBackend;
-    }
-
-    if (options.defaultDxvkEnabled !== undefined) {
-      this.config.defaultDxvkEnabled =
-        options.defaultDxvkEnabled;
-    }
-
-    if (options.defaultVkd3dEnabled !== undefined) {
-      this.config.defaultVkd3dEnabled =
-        options.defaultVkd3dEnabled;
-    }
-
-    if (options.automaticDiagnostics !== undefined) {
-      this.config.automaticDiagnostics =
-        options.automaticDiagnostics;
-    }
-
-    if (options.automaticBackups !== undefined) {
-      this.config.automaticBackups =
-        options.automaticBackups;
-    }
-
-    if (options.maximumBackupsPerGame !== undefined) {
-      this.config.maximumBackupsPerGame =
-        options.maximumBackupsPerGame;
-    }
-  }
-
-  /**
-   * Restore all configurable values to their defaults.
-   *
-   * The root path is intentionally preserved.
-   */
-  resetToDefaults(): void {
-    this.config = {
-      rootPath: this.config.rootPath,
-      ...DEFAULT_CONFIG,
+  toJSON(): Record<string, unknown> {
+    return {
+      compatibilityRoot: this.compatibilityRoot,
+      loggingEnabled: this.loggingEnabled,
+      logLevel: this.logLevel,
+      automaticBackupsEnabled:
+        this.automaticBackupsEnabled,
+      automaticRepairEnabled:
+        this.automaticRepairEnabled,
+      testAfterChanges: this.testAfterChanges,
     };
   }
 }
