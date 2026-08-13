@@ -1,94 +1,204 @@
 /**
  * Hydra Mac Compatibility
  *
- * Defines the per-game graphics compatibility profile.
+ * Per-game graphics compatibility profile.
  *
- * This file contains data structures only.
- * It does not modify the game or Wine environment.
+ * Graphics settings belong to the individual game and should
+ * never accidentally affect another game's configuration.
  */
 
-/**
- * Graphics backends supported by the compatibility layer.
- *
- * "auto" allows the compatibility system to select
- * the appropriate backend later.
- */
-export type MacGraphicsBackend =
-  | "auto"
-  | "vulkan"
-  | "metal"
-  | "opengl";
+import {
+  MacGraphicsConfiguration,
+} from "../manager/MacCompatibilityTypes";
 
-/**
- * Per-game graphics compatibility configuration.
- */
-export interface MacGraphicsProfile {
+export class MacGraphicsProfile {
+  private configuration: MacGraphicsConfiguration;
+
+  constructor(
+    configuration: MacGraphicsConfiguration,
+  ) {
+    this.configuration = {
+      ...configuration,
+
+      environmentVariables: {
+        ...configuration.environmentVariables,
+      },
+
+      compatibilityFlags: [
+        ...configuration.compatibilityFlags,
+      ],
+    };
+  }
+
   /**
-   * Graphics backend used by the compatibility environment.
+   * Return the current graphics configuration.
    */
-  backend: MacGraphicsBackend;
+  getConfiguration(): MacGraphicsConfiguration {
+    return {
+      ...this.configuration,
+
+      environmentVariables: {
+        ...this.configuration.environmentVariables,
+      },
+
+      compatibilityFlags: [
+        ...this.configuration.compatibilityFlags,
+      ],
+    };
+  }
 
   /**
-   * Whether DXVK is enabled for this game.
+   * Replace the complete graphics configuration.
+   */
+  setConfiguration(
+    configuration: MacGraphicsConfiguration,
+  ): void {
+    this.configuration = {
+      ...configuration,
+
+      environmentVariables: {
+        ...configuration.environmentVariables,
+      },
+
+      compatibilityFlags: [
+        ...configuration.compatibilityFlags,
+      ],
+    };
+  }
+
+  /**
+   * Enable or disable DXVK.
+   */
+  setDXVKEnabled(
+    enabled: boolean,
+  ): void {
+    this.configuration.dxvkEnabled =
+      enabled;
+  }
+
+  /**
+   * Enable or disable VKD3D.
+   */
+  setVKD3DEnabled(
+    enabled: boolean,
+  ): void {
+    this.configuration.vkd3dEnabled =
+      enabled;
+  }
+
+  /**
+   * Change the graphics backend.
+   */
+  setBackend(
+    backend: MacGraphicsConfiguration["backend"],
+  ): void {
+    this.configuration.backend =
+      backend;
+  }
+
+  /**
+   * Set the DXVK version.
+   */
+  setDXVKVersion(
+    version: string | undefined,
+  ): void {
+    this.configuration.dxvkVersion =
+      version;
+  }
+
+  /**
+   * Set the VKD3D version.
+   */
+  setVKD3DVersion(
+    version: string | undefined,
+  ): void {
+    this.configuration.vkd3dVersion =
+      version;
+  }
+
+  /**
+   * Set an environment variable.
+   */
+  setEnvironmentVariable(
+    key: string,
+    value: string,
+  ): void {
+    this.configuration.environmentVariables[
+      key
+    ] = value;
+  }
+
+  /**
+   * Remove an environment variable.
+   */
+  removeEnvironmentVariable(
+    key: string,
+  ): void {
+    delete this.configuration
+      .environmentVariables[key];
+  }
+
+  /**
+   * Add a compatibility flag.
+   */
+  addCompatibilityFlag(
+    flag: string,
+  ): void {
+    if (
+      !this.configuration.compatibilityFlags.includes(
+        flag,
+      )
+    ) {
+      this.configuration.compatibilityFlags.push(
+        flag,
+      );
+    }
+  }
+
+  /**
+   * Remove a compatibility flag.
+   */
+  removeCompatibilityFlag(
+    flag: string,
+  ): void {
+    this.configuration.compatibilityFlags =
+      this.configuration.compatibilityFlags.filter(
+        (existingFlag) =>
+          existingFlag !== flag,
+      );
+  }
+
+  /**
+   * Update notes describing this graphics configuration.
+   */
+  setNotes(
+    notes: string,
+  ): void {
+    this.configuration.notes =
+      notes;
+  }
+
+  /**
+   * Validate the current configuration.
    *
-   * DXVK translates DirectX 9/10/11 calls to Vulkan.
+   * This performs structural validation only.
+   * It does not determine whether a particular GPU,
+   * Wine version, DXVK version, or game supports it.
    */
-  dxvkEnabled: boolean;
+  isValid(): boolean {
+    if (!this.configuration.backend) {
+      return false;
+    }
 
-  /**
-   * Whether VKD3D is enabled for this game.
-   *
-   * VKD3D is used for DirectX 12 compatibility.
-   */
-  vkd3dEnabled: boolean;
+    if (
+      this.configuration.dxvkEnabled &&
+      this.configuration.vkd3dEnabled
+    ) {
+      // Both can potentially exist in the same environment,
+      // so this is intentionally NOT considered an error.
+      // Keep the configuration valid.
+    }
 
-  /**
-   * Optional DXVK version selected for this game.
-   */
-  dxvkVersion?: string;
-
-  /**
-   * Optional VKD3D version selected for this game.
-   */
-  vkd3dVersion?: string;
-
-  /**
-   * Optional environment variables used by the game.
-   */
-  environmentVariables: Record<
-    string,
-    string
-  >;
-
-  /**
-   * Additional compatibility flags.
-   *
-   * These are intentionally represented as strings so
-   * new flags can be added without changing the core
-   * profile structure every time.
-   */
-  compatibilityFlags: string[];
-
-  /**
-   * Optional notes describing why this configuration
-   * was selected.
-   */
-  notes?: string;
-}
-
-/**
- * Create a safe default graphics profile.
- */
-export function createDefaultMacGraphicsProfile(): MacGraphicsProfile {
-  return {
-    backend: "auto",
-
-    dxvkEnabled: false,
-
-    vkd3dEnabled: false,
-
-    environmentVariables: {},
-
-    compatibilityFlags: [],
-  };
+    return true;
+  }
 }
