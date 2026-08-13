@@ -1,10 +1,10 @@
 /**
  * Hydra Mac Compatibility
  *
- * Per-game graphics compatibility profile.
+ * Per-game graphics configuration.
  *
- * Graphics settings belong to the individual game and should
- * never accidentally affect another game's configuration.
+ * Graphics settings belong to the individual game profile
+ * and must never be shared accidentally between games.
  */
 
 import {
@@ -17,73 +17,24 @@ export class MacGraphicsProfile {
   constructor(
     configuration: MacGraphicsConfiguration,
   ) {
-    this.configuration = {
-      ...configuration,
-
-      environmentVariables: {
-        ...configuration.environmentVariables,
-      },
-
-      compatibilityFlags: [
-        ...configuration.compatibilityFlags,
-      ],
-    };
+    this.configuration =
+      this.clone(configuration);
   }
 
   /**
-   * Return the current graphics configuration.
+   * Return the complete graphics configuration.
    */
   getConfiguration(): MacGraphicsConfiguration {
-    return {
-      ...this.configuration,
-
-      environmentVariables: {
-        ...this.configuration.environmentVariables,
-      },
-
-      compatibilityFlags: [
-        ...this.configuration.compatibilityFlags,
-      ],
-    };
+    return this.clone(
+      this.configuration,
+    );
   }
 
   /**
-   * Replace the complete graphics configuration.
+   * Return the selected graphics backend.
    */
-  setConfiguration(
-    configuration: MacGraphicsConfiguration,
-  ): void {
-    this.configuration = {
-      ...configuration,
-
-      environmentVariables: {
-        ...configuration.environmentVariables,
-      },
-
-      compatibilityFlags: [
-        ...configuration.compatibilityFlags,
-      ],
-    };
-  }
-
-  /**
-   * Enable or disable DXVK.
-   */
-  setDXVKEnabled(
-    enabled: boolean,
-  ): void {
-    this.configuration.dxvkEnabled =
-      enabled;
-  }
-
-  /**
-   * Enable or disable VKD3D.
-   */
-  setVKD3DEnabled(
-    enabled: boolean,
-  ): void {
-    this.configuration.vkd3dEnabled =
-      enabled;
+  getBackend(): MacGraphicsConfiguration["backend"] {
+    return this.configuration.backend;
   }
 
   /**
@@ -97,23 +48,70 @@ export class MacGraphicsProfile {
   }
 
   /**
-   * Set the DXVK version.
+   * Determine whether DXVK is enabled.
    */
-  setDXVKVersion(
-    version: string | undefined,
+  isDxvkEnabled(): boolean {
+    return this.configuration.dxvk.enabled;
+  }
+
+  /**
+   * Enable or disable DXVK.
+   */
+  setDxvkEnabled(
+    enabled: boolean,
   ): void {
-    this.configuration.dxvkVersion =
+    this.configuration.dxvk.enabled =
+      enabled;
+  }
+
+  /**
+   * Determine whether VKD3D is enabled.
+   */
+  isVkd3dEnabled(): boolean {
+    return this.configuration.vkd3d.enabled;
+  }
+
+  /**
+   * Enable or disable VKD3D.
+   */
+  setVkd3dEnabled(
+    enabled: boolean,
+  ): void {
+    this.configuration.vkd3d.enabled =
+      enabled;
+  }
+
+  /**
+   * Update the DXVK version.
+   */
+  setDxvkVersion(
+    version?: string,
+  ): void {
+    this.configuration.dxvk.version =
       version;
   }
 
   /**
-   * Set the VKD3D version.
+   * Update the VKD3D version.
    */
-  setVKD3DVersion(
-    version: string | undefined,
+  setVkd3dVersion(
+    version?: string,
   ): void {
-    this.configuration.vkd3dVersion =
+    this.configuration.vkd3d.version =
       version;
+  }
+
+  /**
+   * Return environment variables.
+   */
+  getEnvironmentVariables(): Record<
+    string,
+    string
+  > {
+    return {
+      ...this.configuration
+        .environmentVariables,
+    };
   }
 
   /**
@@ -133,9 +131,31 @@ export class MacGraphicsProfile {
    */
   removeEnvironmentVariable(
     key: string,
-  ): void {
+  ): boolean {
+    if (
+      !Object.prototype.hasOwnProperty.call(
+        this.configuration
+          .environmentVariables,
+        key,
+      )
+    ) {
+      return false;
+    }
+
     delete this.configuration
       .environmentVariables[key];
+
+    return true;
+  }
+
+  /**
+   * Return compatibility flags.
+   */
+  getCompatibilityFlags(): string[] {
+    return [
+      ...this.configuration
+        .compatibilityFlags,
+    ];
   }
 
   /**
@@ -145,13 +165,13 @@ export class MacGraphicsProfile {
     flag: string,
   ): void {
     if (
-      !this.configuration.compatibilityFlags.includes(
-        flag,
-      )
+      !this.configuration
+        .compatibilityFlags
+        .includes(flag)
     ) {
-      this.configuration.compatibilityFlags.push(
-        flag,
-      );
+      this.configuration
+        .compatibilityFlags
+        .push(flag);
     }
   }
 
@@ -160,45 +180,59 @@ export class MacGraphicsProfile {
    */
   removeCompatibilityFlag(
     flag: string,
-  ): void {
-    this.configuration.compatibilityFlags =
-      this.configuration.compatibilityFlags.filter(
-        (existingFlag) =>
-          existingFlag !== flag,
-      );
+  ): boolean {
+    const index =
+      this.configuration
+        .compatibilityFlags
+        .indexOf(flag);
+
+    if (index === -1) {
+      return false;
+    }
+
+    this.configuration
+      .compatibilityFlags
+      .splice(index, 1);
+
+    return true;
   }
 
   /**
-   * Update notes describing this graphics configuration.
+   * Update notes attached to the graphics profile.
    */
   setNotes(
-    notes: string,
+    notes?: string,
   ): void {
     this.configuration.notes =
       notes;
   }
 
   /**
-   * Validate the current configuration.
-   *
-   * This performs structural validation only.
-   * It does not determine whether a particular GPU,
-   * Wine version, DXVK version, or game supports it.
+   * Create a safe copy of the configuration.
    */
-  isValid(): boolean {
-    if (!this.configuration.backend) {
-      return false;
-    }
+  private clone(
+    configuration: MacGraphicsConfiguration,
+  ): MacGraphicsConfiguration {
+    return {
+      ...configuration,
 
-    if (
-      this.configuration.dxvkEnabled &&
-      this.configuration.vkd3dEnabled
-    ) {
-      // Both can potentially exist in the same environment,
-      // so this is intentionally NOT considered an error.
-      // Keep the configuration valid.
-    }
+      dxvk: {
+        ...configuration.dxvk,
+      },
 
-    return true;
+      vkd3d: {
+        ...configuration.vkd3d,
+      },
+
+      environmentVariables: {
+        ...configuration
+          .environmentVariables,
+      },
+
+      compatibilityFlags: [
+        ...configuration
+          .compatibilityFlags,
+      ],
+    };
   }
 }
