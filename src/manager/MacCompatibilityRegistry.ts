@@ -1,11 +1,11 @@
 /**
  * Hydra Mac Compatibility
  *
- * Persistent registry for Windows game compatibility profiles.
+ * In-memory registry for Windows game compatibility profiles.
  *
- * The registry is responsible for organizing profiles.
- * File-system persistence will be connected later through
- * the storage subsystem.
+ * The registry provides organized access to profiles.
+ * Persistent file-system storage will be handled by the
+ * storage subsystem.
  */
 
 import {
@@ -20,7 +20,9 @@ export class MacCompatibilityRegistry {
   >();
 
   /**
-   * Add a new game profile to the registry.
+   * Add a new game profile.
+   *
+   * Throws if a profile with the same game ID already exists.
    */
   add(profile: MacGameCompatibilityProfile): void {
     if (this.profiles.has(profile.gameId)) {
@@ -40,7 +42,7 @@ export class MacCompatibilityRegistry {
   }
 
   /**
-   * Retrieve a game profile by its stable ID.
+   * Retrieve a profile by its stable game ID.
    */
   get(gameId: string): MacGameCompatibilityProfile | undefined {
     return this.profiles.get(gameId);
@@ -54,9 +56,9 @@ export class MacCompatibilityRegistry {
   }
 
   /**
-   * Remove a game profile from the registry.
+   * Remove a profile from the registry.
    *
-   * This does NOT delete the game's files.
+   * This does NOT delete any files or game data.
    */
   remove(gameId: string): boolean {
     return this.profiles.delete(gameId);
@@ -70,14 +72,14 @@ export class MacCompatibilityRegistry {
   }
 
   /**
-   * Return the number of registered games.
+   * Return the number of registered profiles.
    */
   count(): number {
     return this.profiles.size;
   }
 
   /**
-   * Find games matching a compatibility status.
+   * Find all games with a particular compatibility status.
    */
   findByStatus(
     status: CompatibilityStatus,
@@ -89,6 +91,9 @@ export class MacCompatibilityRegistry {
 
   /**
    * Find a game by its human-readable name.
+   *
+   * Matching is case-insensitive and ignores leading/trailing
+   * whitespace.
    */
   findByGameName(
     gameName: string,
@@ -102,7 +107,7 @@ export class MacCompatibilityRegistry {
   }
 
   /**
-   * Remove all profiles from the in-memory registry.
+   * Remove every profile from the in-memory registry.
    *
    * This does NOT delete any game data from disk.
    */
