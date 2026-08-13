@@ -3,10 +3,8 @@
  *
  * Diagnostic coordinator for Windows game compatibility.
  *
- * Diagnostics identify problems.
- * They do not modify the game environment.
- *
- * Repair is handled separately by MacCompatibilityRepair.
+ * Diagnostics identify problems but do not modify the game,
+ * Wine environment, dependencies, or graphics configuration.
  */
 
 import {
@@ -19,133 +17,188 @@ export class MacCompatibilityDiagnostics {
   /**
    * Inspect a game's compatibility profile.
    *
-   * This performs safe, profile-level checks only.
-   * Actual Wine/prefix/filesystem inspection will be connected
-   * during Hydra integration.
+   * This is intentionally conservative. Real Wine,
+   * filesystem, dependency, and graphics checks will be
+   * connected as those subsystems become operational.
    */
   diagnose(
     profile: MacGameCompatibilityProfile,
   ): CompatibilityDiagnosticResult {
-    const diagnostics: CompatibilityDiagnostic[] = [];
+    const diagnostics: CompatibilityDiagnostic[] =
+      [];
 
-    if (!profile.gameId) {
-      diagnostics.push({
-        code: "INVALID_GAME_ID",
-        severity: "error",
-        message:
-          "The game does not have a valid game ID.",
-      });
-    }
+    this.checkGamePath(
+      profile,
+      diagnostics,
+    );
 
-    if (!profile.gameName) {
-      diagnostics.push({
-        code: "INVALID_GAME_NAME",
-        severity: "error",
-        message:
-          "The game does not have a valid game name.",
-      });
-    }
+    this.checkWine(
+      profile,
+      diagnostics,
+    );
 
-    if (!profile.gamePath) {
-      diagnostics.push({
-        code: "GAME_PATH_NOT_CONFIGURED",
-        severity: "warning",
-        message:
-          "The game's installation path has not been configured.",
-      });
-    }
+    this.checkDependencies(
+      profile,
+      diagnostics,
+    );
 
-    if (!profile.wine) {
-      diagnostics.push({
-        code: "WINE_CONFIGURATION_MISSING",
-        severity: "error",
-        message:
-          "The game does not have a Wine configuration.",
-      });
-    } else {
-      if (!profile.wine.version) {
-        diagnostics.push({
-          code: "WINE_VERSION_MISSING",
-          severity: "error",
-          message:
-            "No Wine version has been selected.",
-        });
-      }
-
-      if (!profile.wine.prefixPath) {
-        diagnostics.push({
-          code: "WINE_PREFIX_MISSING",
-          severity: "error",
-          message:
-            "The game's Wine prefix has not been configured.",
-        });
-      }
-    }
-
-    if (!profile.graphics) {
-      diagnostics.push({
-        code: "GRAPHICS_CONFIGURATION_MISSING",
-        severity: "error",
-        message:
-          "The game does not have a graphics configuration.",
-      });
-    }
-
-    const hasErrors = diagnostics.some(
-      (diagnostic) =>
-        diagnostic.severity === "error" ||
-        diagnostic.severity === "critical",
+    this.checkGraphics(
+      profile,
+      diagnostics,
     );
 
     const healthy =
-      diagnostics.length === 0;
+      diagnostics.every(
+        (diagnostic) =>
+          diagnostic.severity !==
+            "critical" &&
+          diagnostic.severity !==
+            "error",
+      );
 
     return {
       gameId: profile.gameId,
       healthy,
       diagnostics,
-      checkedAt: new Date().toISOString(),
-      hasErrors,
+      diagnosedAt:
+        new Date().toISOString(),
     };
   }
 
   /**
-   * Determine whether a profile is healthy.
+   * Check whether the game path is configured.
    */
-  isHealthy(
+  private checkGamePath(
     profile: MacGameCompatibilityProfile,
-  ): boolean {
-    return this.diagnose(
-      profile,
-    ).healthy;
+    diagnostics: CompatibilityDiagnostic[],
+  ): void {
+    if (
+      !profile.gamePath ||
+      !profile.gamePath.trim()
+    ) {
+      diagnostics.push({
+        code: "GAME_PATH_NOT_CONFIGURED",
+        severity: "error",
+        message:
+          "The game installation path is not configured.",
+      });
+    }
   }
 
   /**
-   * Return only errors and critical problems.
+   * Check Wine configuration.
    */
-  getErrors(
+  private checkWine(
     profile: MacGameCompatibilityProfile,
-  ): CompatibilityDiagnostic[] {
-    return this.diagnose(
-      profile,
-    ).diagnostics.filter(
-      (diagnostic) =>
-        diagnostic.severity === "error" ||
-        diagnostic.severity === "critical",
-    );
+    diagnostics: CompatibilityDiagnostic[],
+  ): void {
+    if (!profile.wine) {
+      diagnostics.push({
+        code: "WINE_NOT_CONFIGURED",
+        severity: "error",
+        message:
+          "No Wine configuration is assigned to this game.",
+      });
+
+      return;
+    }
+
+    if (
+      !profile.wine.version ||
+      !profile.wine.version.trim()
+    ) {
+      diagnostics.push({
+        code: "WINE_VERSION_NOT_CONFIGURED",
+        severity: "error",
+        message:
+          "The game does not have a Wine version configured.",
+      });
+    }
+
+    if (
+      !profile.wine.prefixPath ||
+      !profile.wine.prefixPath.trim()
+    ) {
+      diagnostics.push({
+        code: "WINE_PREFIX_NOT_CONFIGURED",
+        severity: "error",
+        message:
+          "The game does not have a Wine prefix configured.",
+      });
+    }
   }
 
   /**
-   * Return only warnings.
+   * Check dependency configuration.
    */
-  getWarnings(
+  private checkDependencies(
     profile: MacGameCompatibilityProfile,
-  ): CompatibilityDiagnostic[] {
-    return this.diagnose(
-      profile,
-    ).diagnostics.filter(
-      (diagnostic) =>
-        diagnostic.severity === "warning",
-    );
+    diagnostics: CompatibilityDiagnostic[],
+  ): void {
+    const dependencies =
+      profile.dependencies ?? [];
+
+    for (const dependency of dependencies) {
+      if (
+        !dependency.name ||
+        !dependency.name.trim()
+      ) {
+        diagnostics.push({
+          code:
+            "DEPENDENCY_CONFIGURATION_INVALID",
+          severity: "error",
+          message:
+            "A dependency entry is missing its name.",
+        });
+
+        continue;
+      }
+
+      if (
+        dependency.required &&
+        !dependency.installed
+      ) {
+        diagnostics.push({
+          code:
+            "REQUIRED_DEPENDENCY_MISSING",
+          severity: "error",
+          message:
+            `Required dependency "${dependency.name}" is not installed.`,
+        });
+      }
+    }
+  }
+
+  /**
+   * Check graphics configuration.
+   */
+  private checkGraphics(
+    profile: MacGameCompatibilityProfile,
+    diagnostics: CompatibilityDiagnostic[],
+  ): void {
+    if (!profile.graphics) {
+      diagnostics.push({
+        code:
+          "GRAPHICS_CONFIGURATION_MISSING",
+        severity: "warning",
+        message:
+          "No graphics configuration has been recorded.",
+      });
+
+      return;
+    }
+
+    if (
+      profile.graphics.backend ===
+      "unknown"
+    ) {
+      diagnostics.push({
+        code:
+          "GRAPHICS_BACKEND_UNKNOWN",
+        severity: "warning",
+        message:
+          "The graphics backend has not been determined.",
+      });
+    }
   }
 }
