@@ -1,20 +1,14 @@
 /**
  * Hydra Mac Compatibility
  *
- * Game-level coordinator for Windows games running through
- * the Hydra Mac Compatibility system.
+ * Central coordinator for Windows game compatibility profiles.
  *
- * MacGameManager is responsible for creating, registering,
- * retrieving, updating, and removing game compatibility profiles.
- *
- * It does NOT directly manage Wine, dependencies, graphics,
- * diagnostics, or repair logic.
- *
- * Those responsibilities belong to their respective systems.
+ * The game manager owns game-profile operations.
+ * It does not handle Wine, dependencies, graphics, diagnostics,
+ * or filesystem persistence directly.
  */
 
 import {
-  CompatibilityStatus,
   MacGameCompatibilityProfile,
 } from "../manager/MacCompatibilityTypes";
 
@@ -25,125 +19,99 @@ export class MacGameManager {
   private readonly store: MacGameProfileStore;
 
   constructor(
-    store: MacGameProfileStore = new MacGameProfileStore(),
+    store = new MacGameProfileStore(),
   ) {
     this.store = store;
   }
 
   /**
-   * Create a new compatibility profile for a Windows game.
-   *
-   * The profile starts in an unconfigured state and can
-   * be configured by the compatibility subsystems later.
+   * Register a new game.
    */
-  createProfile(
-    gameId: string,
-    gameName: string,
-    gamePath: string,
-  ): MacGameCompatibilityProfile {
-    if (this.store.exists(gameId)) {
-      throw new Error(
-        `A compatibility profile already exists for game "${gameId}".`,
-      );
-    }
-
-    const profile = new MacGameProfile({
-      gameId,
-      gameName,
-      gamePath,
-    });
-
-    const compatibilityProfile = profile.toProfile();
-
-    this.store.save(compatibilityProfile);
-
-    return compatibilityProfile;
+  register(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameProfile {
+    return this.store.add(
+      profile,
+    );
   }
 
   /**
-   * Retrieve a game's compatibility profile.
+   * Register or replace a game.
    */
-  getProfile(
-    gameId: string,
-  ): MacGameCompatibilityProfile | undefined {
-    return this.store.load(gameId);
+  upsert(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameProfile {
+    return this.store.upsert(
+      profile,
+    );
   }
 
   /**
-   * Retrieve a game profile as a MacGameProfile model.
+   * Retrieve a game by stable ID.
    */
-  getProfileModel(
+  get(
     gameId: string,
   ): MacGameProfile | undefined {
-    return this.store.loadModel(gameId);
+    return this.store.get(
+      gameId,
+    );
   }
 
   /**
-   * Check whether a game has a compatibility profile.
+   * Determine whether a game is registered.
    */
-  hasProfile(gameId: string): boolean {
-    return this.store.exists(gameId);
+  has(
+    gameId: string,
+  ): boolean {
+    return this.store.has(
+      gameId,
+    );
   }
 
   /**
-   * Return every registered game profile.
+   * Remove a game from the manager.
+   *
+   * This does NOT delete game files.
    */
-  getAllProfiles(): MacGameCompatibilityProfile[] {
+  remove(
+    gameId: string,
+  ): boolean {
+    return this.store.remove(
+      gameId,
+    );
+  }
+
+  /**
+   * Return all registered games.
+   */
+  getAll(): MacGameProfile[] {
     return this.store.getAll();
   }
 
   /**
-   * Return all profiles matching a compatibility status.
+   * Find a game by its human-readable name.
    */
-  getProfilesByStatus(
-    status: CompatibilityStatus,
-  ): MacGameCompatibilityProfile[] {
-    return this.store
-      .getAll()
-      .filter((profile) => profile.status === status);
+  findByGameName(
+    gameName: string,
+  ): MacGameProfile | undefined {
+    return this.store.findByGameName(
+      gameName,
+    );
   }
 
   /**
-   * Update and save an existing profile.
+   * Return the number of registered games.
    */
-  updateProfile(
-    profile: MacGameCompatibilityProfile,
-  ): void {
-    if (!this.store.exists(profile.gameId)) {
-      throw new Error(
-        `Cannot update missing compatibility profile for game "${profile.gameId}".`,
-      );
-    }
-
-    this.store.save(profile);
-  }
-
-  /**
-   * Remove a game's compatibility profile.
-   *
-   * IMPORTANT:
-   * This only removes the profile from the profile store.
-   * It does NOT delete the game's files, Wine prefix,
-   * backups, logs, or compatibility directory.
-   */
-  removeProfile(gameId: string): boolean {
-    return this.store.delete(gameId);
-  }
-
-  /**
-   * Return the number of managed games.
-   */
-  getGameCount(): number {
+  count(): number {
     return this.store.count();
   }
 
   /**
-   * Clear all profiles from the store.
+   * Clear the in-memory game registry.
    *
-   * This is intentionally limited to profile data.
-   * It does NOT delete files from disk.
+   * This does NOT delete game data from disk.
    */
-  clearProfiles(): void {
+  clear(): void {
     this.store.clear();
   }
 }
