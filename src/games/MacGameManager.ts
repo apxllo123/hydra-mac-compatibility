@@ -1,19 +1,26 @@
 /**
  * Hydra Mac Compatibility
  *
- * Coordinates Windows game compatibility profiles.
+ * Coordinates Windows game compatibility profiles on macOS.
  *
- * The game manager is responsible for game-level operations.
+ * The game manager owns game-level coordination.
  * It does not directly manage Wine, dependencies, graphics,
- * diagnostics, or filesystem persistence.
+ * diagnostics, repairs, or filesystem persistence.
  */
 
-import {
+import type {
   CompatibilityStatus,
+  GameDependency,
+  GraphicsConfiguration,
   MacGameCompatibilityProfile,
+  WineConfiguration,
 } from "../manager/MacCompatibilityTypes";
 
-import { MacGameProfile } from "./MacGameProfile";
+import {
+  MacGameProfile,
+  MacGameProfileOptions,
+} from "./MacGameProfile";
+
 import { MacGameProfileStore } from "./MacGameProfileStore";
 
 export class MacGameManager {
@@ -26,31 +33,45 @@ export class MacGameManager {
   }
 
   /**
-   * Create a new game compatibility profile.
+   * Register a new game.
    */
-  createProfile(
-    profile: MacGameCompatibilityProfile,
+  register(
+    options: MacGameProfileOptions,
   ): MacGameProfile {
-    return this.store.create(
+    const profile =
+      new MacGameProfile(
+        options,
+      );
+
+    this.store.add(
       profile,
     );
+
+    return profile;
   }
 
   /**
-   * Add or replace a game compatibility profile.
+   * Register or replace a game.
    */
-  upsertProfile(
-    profile: MacGameCompatibilityProfile,
+  upsert(
+    options: MacGameProfileOptions,
   ): MacGameProfile {
-    return this.store.upsert(
+    const profile =
+      new MacGameProfile(
+        options,
+      );
+
+    this.store.upsert(
       profile,
     );
+
+    return profile;
   }
 
   /**
-   * Retrieve a game's compatibility profile.
+   * Retrieve a game by ID.
    */
-  getProfile(
+  get(
     gameId: string,
   ): MacGameProfile | undefined {
     return this.store.get(
@@ -59,9 +80,9 @@ export class MacGameManager {
   }
 
   /**
-   * Check whether a game has a compatibility profile.
+   * Check whether a game is registered.
    */
-  hasProfile(
+  has(
     gameId: string,
   ): boolean {
     return this.store.has(
@@ -70,11 +91,11 @@ export class MacGameManager {
   }
 
   /**
-   * Remove a game's compatibility profile.
+   * Remove a game profile.
    *
-   * This does not delete the game's files.
+   * This does not delete game files.
    */
-  removeProfile(
+  remove(
     gameId: string,
   ): boolean {
     return this.store.remove(
@@ -83,21 +104,21 @@ export class MacGameManager {
   }
 
   /**
-   * Return all registered game profiles.
+   * Return every registered game.
    */
-  getProfiles(): MacGameProfile[] {
+  getAll(): MacGameProfile[] {
     return this.store.getAll();
   }
 
   /**
    * Return the number of registered games.
    */
-  getProfileCount(): number {
+  count(): number {
     return this.store.count();
   }
 
   /**
-   * Find a game by its human-readable name.
+   * Find a game by human-readable name.
    */
   findByGameName(
     gameName: string,
@@ -113,9 +134,8 @@ export class MacGameManager {
   findByStatus(
     status: CompatibilityStatus,
   ): MacGameProfile[] {
-    return this.getProfiles().filter(
-      (profile) =>
-        profile.getStatus() === status,
+    return this.store.findByStatus(
+      status,
     );
   }
 
@@ -127,7 +147,9 @@ export class MacGameManager {
     status: CompatibilityStatus,
   ): boolean {
     const profile =
-      this.getProfile(gameId);
+      this.store.get(
+        gameId,
+      );
 
     if (!profile) {
       return false;
@@ -141,17 +163,252 @@ export class MacGameManager {
   }
 
   /**
-   * Export all profiles for persistence.
+   * Update a game's Wine configuration.
    */
-  exportProfiles(): MacGameCompatibilityProfile[] {
+  setWineConfiguration(
+    gameId: string,
+    wine: WineConfiguration,
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setWineConfiguration(
+      wine,
+    );
+
+    return true;
+  }
+
+  /**
+   * Update a game's graphics configuration.
+   */
+  setGraphicsConfiguration(
+    gameId: string,
+    graphics: GraphicsConfiguration,
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setGraphicsConfiguration(
+      graphics,
+    );
+
+    return true;
+  }
+
+  /**
+   * Replace all dependencies for a game.
+   */
+  setDependencies(
+    gameId: string,
+    dependencies: GameDependency[],
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setDependencies(
+      dependencies,
+    );
+
+    return true;
+  }
+
+  /**
+   * Add or replace one dependency.
+   */
+  setDependency(
+    gameId: string,
+    dependency: GameDependency,
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setDependency(
+      dependency,
+    );
+
+    return true;
+  }
+
+  /**
+   * Remove one dependency.
+   */
+  removeDependency(
+    gameId: string,
+    dependencyId: string,
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    return profile.removeDependency(
+      dependencyId,
+    );
+  }
+
+  /**
+   * Record that a compatibility test was performed.
+   */
+  recordTest(
+    gameId: string,
+    passed: boolean,
+    testedAt = new Date().toISOString(),
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setLastTested(
+      testedAt,
+    );
+
+    profile.setStatus(
+      passed
+        ? "ready"
+        : "degraded",
+    );
+
+    return true;
+  }
+
+  /**
+   * Record that diagnostics were performed.
+   */
+  recordDiagnostic(
+    gameId: string,
+    healthy: boolean,
+    hasCriticalOrError = false,
+    diagnosedAt = new Date().toISOString(),
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setLastDiagnosed(
+      diagnosedAt,
+    );
+
+    if (healthy) {
+      profile.setStatus(
+        "ready",
+      );
+    } else if (
+      hasCriticalOrError
+    ) {
+      profile.setStatus(
+        "broken",
+      );
+    } else {
+      profile.setStatus(
+        "degraded",
+      );
+    }
+
+    return true;
+  }
+
+  /**
+   * Record that a repair was performed.
+   */
+  recordRepair(
+    gameId: string,
+    success: boolean,
+    repairedAt = new Date().toISOString(),
+  ): boolean {
+    const profile =
+      this.store.get(
+        gameId,
+      );
+
+    if (!profile) {
+      return false;
+    }
+
+    profile.setLastRepaired(
+      repairedAt,
+    );
+
+    profile.setStatus(
+      success
+        ? "ready"
+        : "broken",
+    );
+
+    return true;
+  }
+
+  /**
+   * Export one profile as plain data.
+   */
+  exportProfile(
+    gameId: string,
+  ):
+    | MacGameCompatibilityProfile
+    | undefined {
+    return this.store.export(
+      gameId,
+    );
+  }
+
+  /**
+   * Export every profile.
+   */
+  exportAll(): MacGameCompatibilityProfile[] {
     return this.store.exportAll();
   }
 
   /**
-   * Get the underlying profile store.
-   *
-   * Exposed so the storage layer can be connected later
-   * without putting filesystem logic inside this manager.
+   * Import a persisted profile.
+   */
+  importProfile(
+    profile: MacGameCompatibilityProfile,
+  ): MacGameProfile {
+    return this.store.import(
+      profile,
+    );
+  }
+
+  /**
+   * Return the underlying profile store.
    */
   getStore(): MacGameProfileStore {
     return this.store;
