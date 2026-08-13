@@ -1,7 +1,7 @@
 /**
  * Hydra Mac Compatibility
  *
- * Defines the filesystem layout used by Windows Compatibility.
+ * Centralized filesystem paths for the macOS compatibility system.
  *
  * This class only calculates paths.
  * It does not create, delete, or modify files.
@@ -9,20 +9,24 @@
 
 import * as path from "node:path";
 
+export interface MacCompatibilityPathOptions {
+  rootPath: string;
+}
+
 export class MacCompatibilityPaths {
-  /**
-   * Root directory for Hydra Mac Compatibility data.
-   */
   private readonly rootPath: string;
 
-  constructor(rootPath: string) {
-    this.rootPath = path.resolve(
-      rootPath,
-    );
+  constructor(
+    options: MacCompatibilityPathOptions,
+  ) {
+    this.rootPath =
+      path.resolve(
+        options.rootPath,
+      );
   }
 
   /**
-   * Return the compatibility root directory.
+   * Return the root compatibility directory.
    */
   getRootPath(): string {
     return this.rootPath;
@@ -39,7 +43,7 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Return a game's compatibility directory.
+   * Return one game's compatibility directory.
    */
   getGamePath(
     gameId: string,
@@ -51,43 +55,31 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Return a game's Wine prefix directory.
+   * Return the compatibility profile JSON path.
    */
-  getPrefixPath(
+  getProfilePath(
     gameId: string,
   ): string {
     return path.join(
       this.getGamePath(gameId),
-      "prefix",
+      "compatibility.json",
     );
   }
 
   /**
-   * Return a game's configuration directory.
+   * Return the Wine prefix directory.
    */
-  getConfigPath(
+  getWinePrefixPath(
     gameId: string,
   ): string {
     return path.join(
       this.getGamePath(gameId),
-      "config",
+      "wine-prefix",
     );
   }
 
   /**
-   * Return a game's dependency directory.
-   */
-  getDependenciesPath(
-    gameId: string,
-  ): string {
-    return path.join(
-      this.getGamePath(gameId),
-      "dependencies",
-    );
-  }
-
-  /**
-   * Return a game's graphics directory.
+   * Return the graphics configuration directory.
    */
   getGraphicsPath(
     gameId: string,
@@ -99,7 +91,19 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Return a game's log directory.
+   * Return the dependency directory.
+   */
+  getDependenciesPath(
+    gameId: string,
+  ): string {
+    return path.join(
+      this.getGamePath(gameId),
+      "dependencies",
+    );
+  }
+
+  /**
+   * Return the logs directory.
    */
   getLogsPath(
     gameId: string,
@@ -111,7 +115,7 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Return a game's backup directory.
+   * Return the backups directory.
    */
   getBackupsPath(
     gameId: string,
@@ -123,44 +127,70 @@ export class MacCompatibilityPaths {
   }
 
   /**
-   * Return the compatibility profile JSON path.
+   * Return the diagnostics directory.
    */
-  getCompatibilityProfilePath(
+  getDiagnosticsPath(
     gameId: string,
   ): string {
     return path.join(
-      this.getConfigPath(gameId),
-      "compatibility.json",
+      this.getGamePath(gameId),
+      "diagnostics",
     );
   }
 
   /**
-   * Return the global configuration path.
+   * Return the game metadata path.
    */
-  getGlobalConfigPath(): string {
+  getMetadataPath(
+    gameId: string,
+  ): string {
     return path.join(
-      this.rootPath,
-      "configuration.json",
+      this.getGamePath(gameId),
+      "metadata.json",
     );
   }
 
   /**
-   * Prevent IDs from escaping the compatibility directory.
+   * Return the compatibility history path.
+   */
+  getHistoryPath(
+    gameId: string,
+  ): string {
+    return path.join(
+      this.getGamePath(gameId),
+      "history.json",
+    );
+  }
+
+  /**
+   * Sanitize a game ID before using it as a directory name.
+   *
+   * This prevents accidental path traversal and keeps the
+   * compatibility directory structure predictable.
    */
   private sanitizeGameId(
     gameId: string,
   ): string {
-    const sanitized =
+    const normalized =
       gameId
         .trim()
         .replace(/[^a-zA-Z0-9._-]/g, "_");
 
-    if (!sanitized) {
+    if (!normalized) {
       throw new Error(
         "Game ID cannot be empty.",
       );
     }
 
-    return sanitized;
+    if (
+      normalized === "." ||
+      normalized === ".."
+    ) {
+      throw new Error(
+        "Invalid game ID.",
+      );
+    }
+
+    return normalized;
   }
 }
