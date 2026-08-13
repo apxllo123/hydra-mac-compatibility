@@ -1,104 +1,111 @@
 /**
  * Hydra Mac Compatibility
  *
- * Detects the dependency state for Windows games.
+ * Detects Windows compatibility dependencies required by games.
  *
- * Detection is read-only. It does not install, remove,
- * or modify dependencies.
+ * This class is responsible for detection only.
+ * It does not install, remove, or modify dependencies.
  */
 
 import {
-  MacDependency,
   MacGameCompatibilityProfile,
+  MacDependency,
 } from "../manager/MacCompatibilityTypes";
+
+export interface MacDependencyDetectionResult {
+  dependency: MacDependency;
+  installed: boolean;
+  supported: boolean;
+  details?: string;
+}
 
 export class MacDependencyDetector {
   /**
-   * Return all dependencies recorded for a game.
+   * Detect the dependencies currently associated with a game.
+   *
+   * Actual runtime detection will be connected to Wine/prefix
+   * inspection later.
    */
-  detect(
+  async detect(
     profile: MacGameCompatibilityProfile,
-  ): MacDependency[] {
-    return (profile.dependencies ?? []).map(
+  ): Promise<MacDependencyDetectionResult[]> {
+    const dependencies =
+      profile.dependencies ?? [];
+
+    return dependencies.map(
       (dependency) => ({
-        ...dependency,
+        dependency,
+        installed:
+          dependency.installed,
+        supported: true,
+        details:
+          dependency.installed
+            ? "Dependency is recorded as installed."
+            : "Dependency is recorded as missing.",
       }),
     );
   }
 
   /**
-   * Return dependencies that are currently missing.
+   * Determine whether a specific dependency is installed
+   * according to the compatibility profile.
    */
-  getMissing(
+  isInstalled(
+    profile: MacGameCompatibilityProfile,
+    dependencyId: string,
+  ): boolean {
+    const dependency =
+      (
+        profile.dependencies ?? []
+      ).find(
+        (item) =>
+          item.id ===
+          dependencyId,
+      );
+
+    return (
+      dependency?.installed ===
+      true
+    );
+  }
+
+  /**
+   * Find dependencies that are currently missing.
+   */
+  findMissing(
     profile: MacGameCompatibilityProfile,
   ): MacDependency[] {
-    return this.detect(profile).filter(
+    return (
+      profile.dependencies ?? []
+    ).filter(
       (dependency) =>
-        dependency.required &&
         !dependency.installed,
     );
   }
 
   /**
-   * Return dependencies that are installed.
+   * Find dependencies that are installed.
    */
-  getInstalled(
+  findInstalled(
     profile: MacGameCompatibilityProfile,
   ): MacDependency[] {
-    return this.detect(profile).filter(
+    return (
+      profile.dependencies ?? []
+    ).filter(
       (dependency) =>
         dependency.installed,
     );
   }
 
   /**
-   * Determine whether every required dependency is installed.
+   * Determine whether every recorded dependency
+   * is currently installed.
    */
-  areAllInstalled(
+  allInstalled(
     profile: MacGameCompatibilityProfile,
   ): boolean {
-    return this.getMissing(
+    return this.findMissing(
       profile,
     ).length === 0;
-  }
-
-  /**
-   * Find a dependency by name.
-   */
-  findByName(
-    profile: MacGameCompatibilityProfile,
-    dependencyName: string,
-  ): MacDependency | undefined {
-    const normalizedName =
-      dependencyName
-        .trim()
-        .toLowerCase();
-
-    return this.detect(profile).find(
-      (dependency) =>
-        dependency.name
-          .trim()
-          .toLowerCase() ===
-        normalizedName,
-    );
-  }
-
-  /**
-   * Determine whether a dependency is installed.
-   */
-  isInstalled(
-    profile: MacGameCompatibilityProfile,
-    dependencyName: string,
-  ): boolean {
-    const dependency =
-      this.findByName(
-        profile,
-        dependencyName,
-      );
-
-    return (
-      dependency?.installed ??
-      false
-    );
   }
 }
