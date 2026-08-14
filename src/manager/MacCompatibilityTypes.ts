@@ -1,493 +1,237 @@
 /**
  * Hydra Mac Compatibility
  *
- * Shared type definitions for Windows game compatibility on macOS.
+ * Central type definitions for the macOS compatibility system.
  *
- * This file is the central contract used by the compatibility system.
- * Other subsystems should import these types instead of creating
- * competing versions of the same data structures.
+ * All compatibility subsystems should use these shared contracts.
  */
-
 /* -------------------------------------------------------------------------- */
 /* Compatibility Status                                                       */
 /* -------------------------------------------------------------------------- */
-
 export type CompatibilityStatus =
   | "unknown"
   | "ready"
+  | "needs_setup"
   | "degraded"
   | "broken"
   | "testing"
   | "repairing";
-
 /* -------------------------------------------------------------------------- */
-/* Wine                                                                         */
+/* Wine                                                                        */
 /* -------------------------------------------------------------------------- */
-
-export interface WineConfiguration {
-  /**
-   * Human-readable Wine version.
-   */
+export interface MacWineInstallation {
+  /** Stable identifier for this Wine installation. */
+  id: string;
+  /** Human-readable Wine version. */
   version: string;
-
-  /**
-   * Optional path to the Wine executable/runtime.
-   */
-  executablePath?: string;
-
-  /**
-   * Per-game Wine prefix.
-   */
-  prefixPath: string;
-
-  /**
-   * Whether this Wine configuration is currently selected
-   * for the game.
-   */
-  enabled: boolean;
+  /** Path to the Wine executable/runtime. */
+  executablePath: string;
+  /** Whether this installation is currently usable. */
+  available: boolean;
+  /** Optional display name. */
+  name?: string;
+  /** Optional architecture information. */
+  architecture?: string;
 }
-
+export interface WineConfiguration {
+  /** Stable identifier of the selected Wine installation. */
+  id: string;
+  /** Human-readable Wine version. */
+  version: string;
+  /** Path to the Wine executable/runtime. */
+  executablePath: string;
+  /** Per-game Wine prefix. */
+  prefixPath: string;
+  /** Whether this Wine configuration is enabled. */
+  enabled: boolean;
+  /** Optional Wine environment variables. */
+  environmentVariables?: Record<string, string>;
+}
 /* -------------------------------------------------------------------------- */
 /* Dependencies                                                               */
 /* -------------------------------------------------------------------------- */
-
-export type DependencyStatus =
-  | "unknown"
-  | "available"
-  | "installed"
-  | "missing"
-  | "unsupported"
-  | "failed";
-
 export interface GameDependency {
-  /**
-   * Stable dependency identifier.
-   */
+  /** Stable dependency identifier. */
   id: string;
-
-  /**
-   * Human-readable dependency name.
-   */
+  /** Human-readable dependency name. */
   name: string;
-
-  /**
-   * Optional version.
-   */
+  /** Installed version, when known. */
   version?: string;
-
-  /**
-   * Current installation status.
-   */
-  status: DependencyStatus;
-
-  /**
-   * Whether the dependency is required for the game.
-   */
-  required: boolean;
+  /** Whether the dependency is currently installed. */
+  installed: boolean;
+  /** When the dependency was installed. */
+  installedAt?: string;
+  /** Whether the dependency is required by the game. */
+  required?: boolean;
 }
-
 /**
- * Backwards-compatible alias for code that uses MacDependency.
- *
- * New code should prefer GameDependency.
+ * Backwards-compatible alias used by the dependency subsystem.
  */
 export type MacDependency = GameDependency;
-
 /* -------------------------------------------------------------------------- */
 /* Graphics                                                                    */
 /* -------------------------------------------------------------------------- */
-
 export type GraphicsBackend =
   | "auto"
-  | "vulkan"
   | "metal"
+  | "vulkan"
   | "opengl"
   | "directx"
+  | "dxvk"
+  | "vkd3d"
   | "unknown";
-
+export interface GraphicsTranslationLayer {
+  /** Whether the translation layer is enabled. */
+  enabled: boolean;
+  /** Optional installed/configured version. */
+  version?: string;
+}
 export interface GraphicsConfiguration {
-  /**
-   * Graphics backend used by the compatibility environment.
-   */
+  /** Graphics backend used by the compatibility environment. */
   backend: GraphicsBackend;
-
-  /**
-   * Whether DXVK is enabled.
-   */
-  dxvkEnabled: boolean;
-
-  /**
-   * Optional DXVK version.
-   */
-  dxvkVersion?: string;
-
-  /**
-   * Whether VKD3D is enabled.
-   */
-  vkd3dEnabled: boolean;
-
-  /**
-   * Optional VKD3D version.
-   */
-  vkd3dVersion?: string;
-
-  /**
-   * Environment variables applied to the game.
-   */
+  /** DXVK configuration. */
+  dxvk: GraphicsTranslationLayer;
+  /** VKD3D configuration. */
+  vkd3d: GraphicsTranslationLayer;
+  /** Environment variables applied to the game. */
   environmentVariables: Record<string, string>;
-
-  /**
-   * Compatibility flags applied to the game.
-   */
+  /** Compatibility flags applied to the game. */
   compatibilityFlags: string[];
-
-  /**
-   * Optional developer/user notes.
-   */
+  /** Optional developer/user notes. */
   notes?: string;
 }
-
 /**
- * Alias used by the dedicated graphics subsystem.
+ * Alias for code that refers to the graphics configuration as a profile.
  */
 export type MacGraphicsProfile = GraphicsConfiguration;
-
 /* -------------------------------------------------------------------------- */
-/* Compatibility Test Results                                                  */
+/* Diagnostics                                                                */
 /* -------------------------------------------------------------------------- */
-
-export type CompatibilityTestStatus =
-  | "passed"
-  | "failed"
-  | "partial"
-  | "skipped";
-
-export interface CompatibilityTest {
-  /**
-   * Identifier for the individual test.
-   */
-  id: string;
-
-  /**
-   * Human-readable test name.
-   */
-  name: string;
-
-  /**
-   * Test result.
-   */
-  status: CompatibilityTestStatus;
-
-  /**
-   * Optional explanation.
-   */
-  message?: string;
-
-  /**
-   * Optional test duration.
-   */
-  durationMs?: number;
-}
-
-export interface CompatibilityTestResult {
-  /**
-   * Game this result belongs to.
-   */
-  gameId: string;
-
-  /**
-   * Whether the overall compatibility test passed.
-   */
-  passed: boolean;
-
-  /**
-   * When the test was performed.
-   */
-  testedAt: string;
-
-  /**
-   * Individual tests performed.
-   */
-  tests: CompatibilityTest[];
-
-  /**
-   * Optional diagnostic information produced during testing.
-   */
-  diagnostics?: string[];
-
-  /**
-   * Total test duration.
-   */
-  durationMs?: number;
-}
-
-/* -------------------------------------------------------------------------- */
-/* Diagnostics                                                                 */
-/* -------------------------------------------------------------------------- */
-
 export type DiagnosticSeverity =
   | "info"
   | "warning"
   | "error"
   | "critical";
-
 export interface CompatibilityDiagnostic {
-  /**
-   * Stable diagnostic identifier.
-   */
+  /** Stable diagnostic identifier. */
   id: string;
-
-  /**
-   * Severity of the issue.
-   */
+  /** Severity of the issue. */
   severity: DiagnosticSeverity;
-
-  /**
-   * Human-readable title.
-   */
+  /** Human-readable title. */
   title: string;
-
-  /**
-   * Detailed explanation.
-   */
+  /** Detailed explanation. */
   message: string;
-
-  /**
-   * Optional subsystem responsible for the issue.
-   */
+  /** Optional subsystem responsible for the issue. */
   subsystem?: string;
-
-  /**
-   * Whether the issue can potentially be repaired automatically.
-   */
+  /** Whether the issue can potentially be repaired automatically. */
   repairable?: boolean;
 }
-
 export interface CompatibilityDiagnosticResult {
-  /**
-   * Game this diagnostic result belongs to.
-   */
+  /** Game this diagnostic result belongs to. */
   gameId: string;
-
-  /**
-   * Whether the compatibility environment is healthy.
-   */
-  healthy: boolean;
-
-  /**
-   * Diagnostics discovered during inspection.
-   */
-  diagnostics: CompatibilityDiagnostic[];
-
-  /**
-   * When diagnostics were performed.
-   */
+  /** When diagnostics were performed. */
   diagnosedAt: string;
+  /** Whether the compatibility environment is healthy. */
+  healthy: boolean;
+  /** Diagnostics discovered during inspection. */
+  diagnostics: CompatibilityDiagnostic[];
 }
-
+/* -------------------------------------------------------------------------- */
+/* Compatibility Testing                                                      */
+/* -------------------------------------------------------------------------- */
+export interface CompatibilityTestResult {
+  /** Game this result belongs to. */
+  gameId: string;
+  /** Whether all required checks passed. */
+  passed: boolean;
+  /** When the test was performed. */
+  testedAt: string;
+  /** Human-readable checks that were performed successfully. */
+  checks: string[];
+  /** Human-readable failures discovered during testing. */
+  failures: string[];
+  /** Optional total duration in milliseconds. */
+  durationMs?: number;
+}
 /* -------------------------------------------------------------------------- */
 /* Repair                                                                      */
 /* -------------------------------------------------------------------------- */
-
-export type CompatibilityRepairStatus =
-  | "success"
-  | "failed"
-  | "partial"
-  | "cancelled";
-
-export interface CompatibilityRepairAction {
-  /**
-   * Identifier for the repair action.
-   */
-  id: string;
-
-  /**
-   * Human-readable description.
-   */
-  description: string;
-
-  /**
-   * Whether the action completed successfully.
-   */
-  success: boolean;
-
-  /**
-   * Optional explanation.
-   */
-  message?: string;
-}
-
 export interface CompatibilityRepairResult {
-  /**
-   * Game this repair belongs to.
-   */
+  /** Game this repair belongs to. */
   gameId: string;
-
-  /**
-   * Whether the overall repair succeeded.
-   */
+  /** Whether the repair operation completed successfully. */
   success: boolean;
-
-  /**
-   * Overall repair status.
-   */
-  status?: CompatibilityRepairStatus;
-
-  /**
-   * When the repair was performed.
-   */
+  /** When the repair was performed. */
   repairedAt: string;
-
-  /**
-   * Individual repair actions.
-   */
-  actions?: CompatibilityRepairAction[];
-
-  /**
-   * Optional backup identifier created before repair.
-   */
+  /** Human-readable changes made by the repair. */
+  changes: string[];
+  /** Warnings that do not necessarily indicate repair failure. */
+  warnings: string[];
+  /** Optional backup identifier. */
   backupId?: string;
-
-  /**
-   * Optional error message.
-   */
-  error?: string;
 }
-
 /* -------------------------------------------------------------------------- */
 /* Known-Good Configuration                                                    */
 /* -------------------------------------------------------------------------- */
-
 export interface KnownGoodConfiguration {
-  /**
-   * Wine configuration known to work.
-   */
+  /** Wine configuration known to work. */
   wine?: WineConfiguration;
-
-  /**
-   * Graphics configuration known to work.
-   */
+  /** Graphics configuration known to work. */
   graphics?: GraphicsConfiguration;
-
-  /**
-   * Dependencies known to be installed/working.
-   */
+  /** Dependencies known to be installed/working. */
   dependencies: GameDependency[];
-
-  /**
-   * When this configuration was confirmed.
-   */
+  /** When this configuration was confirmed. */
   confirmedAt: string;
-
-  /**
-   * Optional notes describing the successful configuration.
-   */
+  /** Optional notes describing the successful configuration. */
   notes?: string;
 }
-
 /* -------------------------------------------------------------------------- */
-/* Backup Information                                                          */
+/* Backup                                                                      */
 /* -------------------------------------------------------------------------- */
-
 export interface CompatibilityBackup {
-  /**
-   * Stable backup identifier.
-   */
+  /** Stable backup identifier. */
   id: string;
-
-  /**
-   * Backup location.
-   */
+  /** Backup location, when a physical backup exists. */
   path: string;
-
-  /**
-   * When the backup was created.
-   */
+  /** When the backup was created. */
   createdAt: string;
-
-  /**
-   * Optional description.
-   */
+  /** Optional description. */
   description?: string;
 }
-
 /* -------------------------------------------------------------------------- */
 /* Game Compatibility Profile                                                  */
 /* -------------------------------------------------------------------------- */
-
 export interface MacGameCompatibilityProfile {
-  /**
-   * Stable Hydra/game identifier.
-   */
+  /** Stable Hydra/game identifier. */
   gameId: string;
-
-  /**
-   * Human-readable game name.
-   */
+  /** Human-readable game name. */
   gameName: string;
-
-  /**
-   * Original Windows game path.
-   */
+  /** Original Windows game path. */
   gamePath: string;
-
-  /**
-   * Root directory containing this game's compatibility data.
-   */
+  /** Windows game executable inside the game environment. */
+  executable: string;
+  /** Root directory containing this game's compatibility data. */
   compatibilityPath: string;
-
-  /**
-   * Current compatibility status.
-   */
+  /** Current compatibility status. */
   status: CompatibilityStatus;
-
-  /**
-   * Wine configuration for this game.
-   */
+  /** Wine configuration for this game. */
   wine: WineConfiguration;
-
-  /**
-   * Graphics configuration for this game.
-   */
+  /** Graphics configuration for this game. */
   graphics: GraphicsConfiguration;
-
-  /**
-   * Windows dependencies associated with this game.
-   */
+  /** Windows dependencies associated with this game. */
   dependencies: GameDependency[];
-
-  /**
-   * Last compatibility test timestamp.
-   */
+  /** Last compatibility test timestamp. */
   lastTested?: string;
-
-  /**
-   * Last diagnostic timestamp.
-   */
+  /** Last diagnostic timestamp. */
   lastDiagnosed?: string;
-
-  /**
-   * Last repair timestamp.
-   */
+  /** Last repair timestamp. */
   lastRepaired?: string;
-
-  /**
-   * Last time the profile was modified.
-   */
+  /** Last time the profile was modified. */
   lastUpdated?: string;
-
-  /**
-   * Last known-good configuration.
-   */
+  /** Last known-good configuration. */
   lastKnownGoodConfiguration?: KnownGoodConfiguration;
-
-  /**
-   * Available backups for this game.
-   */
+  /** Available backups for this game. */
   backups: CompatibilityBackup[];
-
-  /**
-   * Optional user/developer notes.
-   */
+  /** Optional user/developer notes. */
   notes?: string;
 }
