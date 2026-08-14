@@ -8,6 +8,7 @@ permissions:
 
 jobs:
   generate-lockfile:
+    name: Generate Package Lock
     runs-on: ubuntu-latest
 
     steps:
@@ -26,6 +27,12 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add package-lock.json
-          git diff --cached --quiet || git commit -m "chore: add package lock"
-          git push
+
+          if git diff --cached --quiet; then
+            echo "No package-lock.json changes to commit."
+          else
+            git commit -m "chore: add package lock"
+            git push
+          fi
