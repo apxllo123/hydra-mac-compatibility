@@ -10,9 +10,9 @@
 
 import type {
   MacGameCompatibilityProfile,
-} from "../manager/MacCompatibilityTypes";
+} from "../manager/MacCompatibilityTypes.js";
 
-import { MacGameProfile } from "./MacGameProfile";
+import { MacGameProfile } from "./MacGameProfile.js";
 
 export class MacGameProfileStore {
   private readonly profiles = new Map<
@@ -28,8 +28,7 @@ export class MacGameProfileStore {
   add(
     profile: MacGameProfile,
   ): void {
-    const gameId =
-      profile.getGameId();
+    const gameId = profile.getGameId();
 
     if (this.profiles.has(gameId)) {
       throw new Error(
@@ -61,9 +60,7 @@ export class MacGameProfileStore {
   get(
     gameId: string,
   ): MacGameProfile | undefined {
-    return this.profiles.get(
-      gameId,
-    );
+    return this.profiles.get(gameId);
   }
 
   /**
@@ -72,9 +69,7 @@ export class MacGameProfileStore {
   has(
     gameId: string,
   ): boolean {
-    return this.profiles.has(
-      gameId,
-    );
+    return this.profiles.has(gameId);
   }
 
   /**
@@ -86,9 +81,7 @@ export class MacGameProfileStore {
   remove(
     gameId: string,
   ): boolean {
-    return this.profiles.delete(
-      gameId,
-    );
+    return this.profiles.delete(gameId);
   }
 
   /**
@@ -114,9 +107,7 @@ export class MacGameProfileStore {
     gameName: string,
   ): MacGameProfile | undefined {
     const normalizedName =
-      gameName
-        .trim()
-        .toLowerCase();
+      gameName.trim().toLowerCase();
 
     return this.getAll().find(
       (profile) =>
@@ -136,8 +127,7 @@ export class MacGameProfileStore {
   ): MacGameProfile[] {
     return this.getAll().filter(
       (profile) =>
-        profile.getStatus() ===
-        status,
+        profile.getStatus() === status,
     );
   }
 
@@ -177,64 +167,30 @@ export class MacGameProfileStore {
   ): MacGameProfile {
     const gameProfile =
       new MacGameProfile({
-        gameId:
-          profile.gameId,
-
-        gameName:
-          profile.gameName,
-
-        gamePath:
-          profile.gamePath,
-
+        gameId: profile.gameId,
+        gameName: profile.gameName,
+        gamePath: profile.gamePath,
+        executable: profile.executable,
         compatibilityPath:
           profile.compatibilityPath,
-
-        wine:
-          profile.wine,
-
-        graphics:
-          profile.graphics,
-
-        dependencies:
-          profile.dependencies,
-
-        status:
-          profile.status,
-
-        backups:
-          profile.backups,
-
+        wine: profile.wine,
+        graphics: profile.graphics,
+        dependencies: profile.dependencies,
+        status: profile.status,
+        backups: profile.backups,
         lastKnownGoodConfiguration:
           profile.lastKnownGoodConfiguration,
-
-        notes:
-          profile.notes,
+        lastTested: profile.lastTested,
+        lastDiagnosed:
+          profile.lastDiagnosed,
+        lastRepaired:
+          profile.lastRepaired,
+        lastUpdated:
+          profile.lastUpdated,
+        notes: profile.notes,
       });
 
-    gameProfile.setLastTested(
-      profile.lastTested ??
-        "",
-    );
-
-    if (
-      profile.lastDiagnosed
-    ) {
-      gameProfile.setLastDiagnosed(
-        profile.lastDiagnosed,
-      );
-    }
-
-    if (
-      profile.lastRepaired
-    ) {
-      gameProfile.setLastRepaired(
-        profile.lastRepaired,
-      );
-    }
-
-    this.upsert(
-      gameProfile,
-    );
+    this.upsert(gameProfile);
 
     return gameProfile;
   }
