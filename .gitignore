@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+*.log
+logs/
+
+# macOS
+.DS_Store
+
+# IDEs / editors
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+tmp/
+temp/
+
+# Test artifacts
+test-results/
