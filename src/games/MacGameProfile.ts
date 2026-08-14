@@ -2,21 +2,60 @@
  * Hydra Mac Compatibility
  *
  * Represents one Windows game's compatibility profile.
- *
- * A profile is the central per-game record containing the
- * configuration Hydra needs to remember what worked.
  */
 
 import type {
   CompatibilityStatus,
+  GameDependency,
+  GraphicsConfiguration,
   MacGameCompatibilityProfile,
+  WineConfiguration,
 } from "../manager/MacCompatibilityTypes.js";
+
+export interface MacGameProfileOptions {
+  gameId: string;
+  gameName: string;
+  gamePath: string;
+  executable: string;
+  compatibilityPath: string;
+  status?: CompatibilityStatus;
+  wine: WineConfiguration;
+  graphics: GraphicsConfiguration;
+  dependencies?: GameDependency[];
+  backups?: MacGameCompatibilityProfile["backups"];
+  lastTested?: string;
+  lastDiagnosed?: string;
+  lastRepaired?: string;
+  lastUpdated?: string;
+  lastKnownGoodConfiguration?: MacGameCompatibilityProfile["lastKnownGoodConfiguration"];
+  notes?: string;
+}
 
 export class MacGameProfile {
   private profile: MacGameCompatibilityProfile;
 
-  constructor(profile: MacGameCompatibilityProfile) {
-    this.profile = this.clone(profile);
+  constructor(
+    profile: MacGameCompatibilityProfile | MacGameProfileOptions,
+  ) {
+    this.profile = this.clone({
+      gameId: profile.gameId,
+      gameName: profile.gameName,
+      gamePath: profile.gamePath,
+      executable: profile.executable,
+      compatibilityPath: profile.compatibilityPath,
+      status: profile.status ?? "unknown",
+      wine: profile.wine,
+      graphics: profile.graphics,
+      dependencies: profile.dependencies ?? [],
+      backups: profile.backups ?? [],
+      lastTested: profile.lastTested,
+      lastDiagnosed: profile.lastDiagnosed,
+      lastRepaired: profile.lastRepaired,
+      lastUpdated: profile.lastUpdated,
+      lastKnownGoodConfiguration:
+        profile.lastKnownGoodConfiguration,
+      notes: profile.notes,
+    });
   }
 
   getProfile(): MacGameCompatibilityProfile {
@@ -55,65 +94,54 @@ export class MacGameProfile {
     this.profile.executable = executable;
   }
 
-  getWine(): MacGameCompatibilityProfile["wine"] {
+  getWine(): WineConfiguration {
     return {
       ...this.profile.wine,
-      environmentVariables: this.profile.wine.environmentVariables
-        ? { ...this.profile.wine.environmentVariables }
-        : undefined,
+      environmentVariables:
+        this.profile.wine.environmentVariables
+          ? {
+              ...this.profile.wine.environmentVariables,
+            }
+          : undefined,
     };
   }
 
-  setWine(
-    wine: MacGameCompatibilityProfile["wine"],
-  ): void {
+  setWine(wine: WineConfiguration): void {
     this.profile.wine = {
       ...wine,
-      environmentVariables: wine.environmentVariables
-        ? { ...wine.environmentVariables }
-        : undefined,
+      environmentVariables:
+        wine.environmentVariables
+          ? {
+              ...wine.environmentVariables,
+            }
+          : undefined,
     };
   }
 
-  getGraphics(): MacGameCompatibilityProfile["graphics"] {
-    return {
-      ...this.profile.graphics,
-      dxvk: {
-        ...this.profile.graphics.dxvk,
-      },
-      vkd3d: {
-        ...this.profile.graphics.vkd3d,
-      },
-      environmentVariables: {
-        ...this.profile.graphics.environmentVariables,
-      },
-      compatibilityFlags: [
-        ...this.profile.graphics.compatibilityFlags,
-      ],
-    };
+  setWineConfiguration(
+    wine: WineConfiguration,
+  ): void {
+    this.setWine(wine);
+  }
+
+  getGraphics(): GraphicsConfiguration {
+    return this.cloneGraphics(this.profile.graphics);
   }
 
   setGraphics(
-    graphics: MacGameCompatibilityProfile["graphics"],
+    graphics: GraphicsConfiguration,
   ): void {
-    this.profile.graphics = {
-      ...graphics,
-      dxvk: {
-        ...graphics.dxvk,
-      },
-      vkd3d: {
-        ...graphics.vkd3d,
-      },
-      environmentVariables: {
-        ...graphics.environmentVariables,
-      },
-      compatibilityFlags: [
-        ...graphics.compatibilityFlags,
-      ],
-    };
+    this.profile.graphics =
+      this.cloneGraphics(graphics);
   }
 
-  getDependencies(): MacGameCompatibilityProfile["dependencies"] {
+  setGraphicsConfiguration(
+    graphics: GraphicsConfiguration,
+  ): void {
+    this.setGraphics(graphics);
+  }
+
+  getDependencies(): GameDependency[] {
     return this.profile.dependencies.map(
       (dependency) => ({
         ...dependency,
@@ -122,13 +150,50 @@ export class MacGameProfile {
   }
 
   setDependencies(
-    dependencies: MacGameCompatibilityProfile["dependencies"],
+    dependencies: GameDependency[],
   ): void {
-    this.profile.dependencies = dependencies.map(
-      (dependency) => ({
+    this.profile.dependencies =
+      dependencies.map(
+        (dependency) => ({
+          ...dependency,
+        }),
+      );
+  }
+
+  setDependency(
+    dependency: GameDependency,
+  ): void {
+    const index =
+      this.profile.dependencies.findIndex(
+        (item) => item.id === dependency.id,
+      );
+
+    if (index === -1) {
+      this.profile.dependencies.push({
         ...dependency,
-      }),
-    );
+      });
+    } else {
+      this.profile.dependencies[index] = {
+        ...dependency,
+      };
+    }
+  }
+
+  removeDependency(
+    dependencyId: string,
+  ): boolean {
+    const index =
+      this.profile.dependencies.findIndex(
+        (dependency) =>
+          dependency.id === dependencyId,
+      );
+
+    if (index === -1) {
+      return false;
+    }
+
+    this.profile.dependencies.splice(index, 1);
+    return true;
   }
 
   getBackups(): MacGameCompatibilityProfile["backups"] {
@@ -185,6 +250,26 @@ export class MacGameProfile {
     this.profile = this.clone(profile);
   }
 
+  private cloneGraphics(
+    graphics: GraphicsConfiguration,
+  ): GraphicsConfiguration {
+    return {
+      ...graphics,
+      dxvk: {
+        ...graphics.dxvk,
+      },
+      vkd3d: {
+        ...graphics.vkd3d,
+      },
+      environmentVariables: {
+        ...graphics.environmentVariables,
+      },
+      compatibilityFlags: [
+        ...graphics.compatibilityFlags,
+      ],
+    };
+  }
+
   private clone(
     profile: MacGameCompatibilityProfile,
   ): MacGameCompatibilityProfile {
@@ -201,27 +286,16 @@ export class MacGameProfile {
             : undefined,
       },
 
-      graphics: {
-        ...profile.graphics,
-        dxvk: {
-          ...profile.graphics.dxvk,
-        },
-        vkd3d: {
-          ...profile.graphics.vkd3d,
-        },
-        environmentVariables: {
-          ...profile.graphics.environmentVariables,
-        },
-        compatibilityFlags: [
-          ...profile.graphics.compatibilityFlags,
-        ],
-      },
-
-      dependencies: profile.dependencies.map(
-        (dependency) => ({
-          ...dependency,
-        }),
+      graphics: this.cloneGraphics(
+        profile.graphics,
       ),
+
+      dependencies:
+        profile.dependencies.map(
+          (dependency) => ({
+            ...dependency,
+          }),
+        ),
 
       backups: profile.backups.map(
         (backup) => ({
@@ -233,7 +307,6 @@ export class MacGameProfile {
         profile.lastKnownGoodConfiguration
           ? {
               ...profile.lastKnownGoodConfiguration,
-
               dependencies:
                 profile.lastKnownGoodConfiguration
                   .dependencies.map(
@@ -241,7 +314,6 @@ export class MacGameProfile {
                       ...dependency,
                     }),
                   ),
-
               wine:
                 profile.lastKnownGoodConfiguration.wine
                   ? {
@@ -257,33 +329,12 @@ export class MacGameProfile {
                           : undefined,
                     }
                   : undefined,
-
               graphics:
                 profile.lastKnownGoodConfiguration.graphics
-                  ? {
-                      ...profile.lastKnownGoodConfiguration
+                  ? this.cloneGraphics(
+                      profile.lastKnownGoodConfiguration
                         .graphics,
-
-                      dxvk: {
-                        ...profile.lastKnownGoodConfiguration
-                          .graphics.dxvk,
-                      },
-
-                      vkd3d: {
-                        ...profile.lastKnownGoodConfiguration
-                          .graphics.vkd3d,
-                      },
-
-                      environmentVariables: {
-                        ...profile.lastKnownGoodConfiguration
-                          .graphics.environmentVariables,
-                      },
-
-                      compatibilityFlags: [
-                        ...profile.lastKnownGoodConfiguration
-                          .graphics.compatibilityFlags,
-                      ],
-                    }
+                    )
                   : undefined,
             }
           : undefined,
