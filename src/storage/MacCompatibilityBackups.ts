@@ -7,17 +7,14 @@
  * This class does not perform filesystem copies yet. The actual
  * file operations will be connected through the storage layer.
  */
-
 import type {
   CompatibilityBackup,
 } from "../manager/MacCompatibilityTypes";
-
 export class MacCompatibilityBackups {
   private readonly backups = new Map<
     string,
     CompatibilityBackup[]
   >();
-
   /**
    * Add backup metadata for a game.
    */
@@ -27,17 +24,14 @@ export class MacCompatibilityBackups {
   ): void {
     const gameBackups =
       this.backups.get(gameId) ?? [];
-
     gameBackups.push({
       ...backup,
     });
-
     this.backups.set(
       gameId,
       gameBackups,
     );
   }
-
   /**
    * Return all backups for a game.
    */
@@ -52,7 +46,6 @@ export class MacCompatibilityBackups {
       }),
     );
   }
-
   /**
    * Return the most recent backup for a game.
    */
@@ -61,21 +54,23 @@ export class MacCompatibilityBackups {
   ): CompatibilityBackup | undefined {
     const gameBackups =
       this.backups.get(gameId);
-
     if (
       !gameBackups ||
       gameBackups.length === 0
     ) {
       return undefined;
     }
-
-    return {
-      ...gameBackups[
+    const latest =
+      gameBackups[
         gameBackups.length - 1
-      ],
+      ];
+    if (!latest) {
+      return undefined;
+    }
+    return {
+      ...latest,
     };
   }
-
   /**
    * Check whether a game has any backups.
    */
@@ -87,7 +82,6 @@ export class MacCompatibilityBackups {
         0) > 0
     );
   }
-
   /**
    * Return the number of backups for a game.
    */
@@ -99,7 +93,6 @@ export class MacCompatibilityBackups {
       0
     );
   }
-
   /**
    * Remove one backup by its ID.
    *
@@ -112,26 +105,21 @@ export class MacCompatibilityBackups {
   ): boolean {
     const gameBackups =
       this.backups.get(gameId);
-
     if (!gameBackups) {
       return false;
     }
-
     const index =
       gameBackups.findIndex(
         (backup) =>
           backup.id === backupId,
       );
-
     if (index === -1) {
       return false;
     }
-
     gameBackups.splice(
       index,
       1,
     );
-
     if (
       gameBackups.length === 0
     ) {
@@ -139,10 +127,8 @@ export class MacCompatibilityBackups {
         gameId,
       );
     }
-
     return true;
   }
-
   /**
    * Remove all backup metadata for a game.
    *
@@ -155,7 +141,6 @@ export class MacCompatibilityBackups {
       gameId,
     );
   }
-
   /**
    * Remove all in-memory backup metadata.
    */
